@@ -22,8 +22,9 @@ export class GitignoreService {
 		try {
 			const data = await vscode.workspace.fs.readFile(gitignoreUri);
 			content = data.toString();
-		} catch {
-			// .gitignore not found or not readable; ignore silently
+		} 
+		catch {
+			// .gitignore not found 
 		}
 
 		const rules = this.parseGitignore(content);
@@ -33,8 +34,10 @@ export class GitignoreService {
 	}
 
 	private parseGitignore(content: string): GitignoreRule[] {
+
 		const rules: GitignoreRule[] = [];
 		const lines = content.split(/\r?\n/);
+
 		for (const rawLine of lines) {
 			if (!rawLine || rawLine.trim().length === 0) {
 				continue;
@@ -42,9 +45,11 @@ export class GitignoreService {
 
 			let line = rawLine;
 			let negate = false;
+
 			if (line.startsWith('\\#')) {
 				line = line.slice(1);
-			} else if (line.startsWith('#')) {
+			} 
+			else if (line.startsWith('#')) {
 				continue;
 			}
 
@@ -67,8 +72,10 @@ export class GitignoreService {
 	}
 
 	private matchGitignore(rules: GitignoreRule[], relativePath: string): boolean {
+
 		const normalized = relativePath.replace(/\\/g, '/');
 		let ignored = false;
+
 		for (const rule of rules) {
 			const matches = rule.isDirectory
 				? rule.regex.test(normalized + '/')

@@ -1,14 +1,19 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { LineCounter } from './services/LineCounter';
 import { GitignoreService } from './services/GitignoreService';
 import { WorkspaceLineCounter } from './services/WorkspaceLineCounter';
 import { LineCounterByFileFormat } from './services/LineCounterByFileFormat';
+import { StatsTreeProvider } from './views/StatsTreeProvider';
+import { StatsService } from './services/StatsService';
 
 export function activate(context: vscode.ExtensionContext) {
 	const lineCounter = new LineCounter();
 	const gitignoreService = new GitignoreService();
 	const workspaceLineCounter = new WorkspaceLineCounter(lineCounter, gitignoreService);
 	const lineCounterByFileFormat = new LineCounterByFileFormat(workspaceLineCounter);
+	const statsService = new StatsService(lineCounter, gitignoreService);
+	const statsProvider = new StatsTreeProvider(statsService);
 
 	const fileline = vscode.commands.registerCommand('codecount.countLines', () => {
 		const editor = vscode.window.activeTextEditor;
@@ -66,9 +71,81 @@ export function activate(context: vscode.ExtensionContext) {
 		);
 	});
 
+	const refreshStats = vscode.commands.registerCommand('codecount.refreshStats', () => {
+		statsProvider.refresh();
+	});
+
+	const openContributorFile = vscode.commands.registerCommand(
+		'codecount.openContributorFile',
+		async (args?: { author?: string; filePath?: string }) => {
+			const author = args?.author;
+			const filePath = args?.filePath;
+			if (!author || !filePath) {
+				return;
+			}
+			const rootPath = await statsService.getGitRootPath();
+			if (!rootPath) {
+				vscode.window.showWarningMessage('Git repository not found.');
+				return;
+			}
+
+			const absolutePath = vscode.Uri.file(path.join(rootPath, filePath));
+			try {
+				const document = await vscode.workspace.openTextDocument(absolutePath);
+				await vscode.window.showTextDocument(document, { preview: false });
+			} catch {
+				vscode.window.showWarningMessage('File not found in workspace.');
+				return;
+			}
+
+			const history = await statsService.getContributorFileHistory(author, filePath);
+			if (!history.available) {
+				vscode.window.showWarningMessage('Git repository not found.');
+				return;
+			}
+			if (history.entries.length === 0) {
+				vscode.window.showInformationMessage('No history found for this contributor.');
+				return;
+			}
+
+			const pick = await vscode.window.showQuickPick(
+				history.entries.map((entry) => ({
+					label: `${entry.date}  ${entry.hash}`,
+					hash: entry.hash
+				})),
+				{
+					placeHolder: 'Select a commit to view changes'
+				}
+			);
+			if (!pick) {
+				return;
+			}
+
+			const gitPath = path.join(rootPath, filePath);
+			const encode = (ref: string) =>
+				vscode.Uri.parse(
+					`git:${gitPath}?${encodeURIComponent(JSON.stringify({ path: gitPath, ref }))}`
+				);
+
+			const left = encode(`${pick.hash}^`);
+			const right = encode(pick.hash);
+			await vscode.commands.executeCommand(
+				'vscode.diff',
+				left,
+				right,
+				`Changes by ${author}: ${filePath} (${pick.hash})`
+			);
+		}
+	);
+
 	context.subscriptions.push(fileline);
 	context.subscriptions.push(fileslines);
 	context.subscriptions.push(fileslinesByExtension);
+	context.subscriptions.push(refreshStats);
+	context.subscriptions.push(openContributorFile);
+	context.subscriptions.push(
+		vscode.window.registerTreeDataProvider('codecount.stats', statsProvider)
+	);
 }
 
 // This method is called when your extension is deactivated
