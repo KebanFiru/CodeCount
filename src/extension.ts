@@ -75,6 +75,10 @@ export function activate(context: vscode.ExtensionContext) {
 		statsProvider.refresh();
 	});
 
+	const gitRepoMissing = vscode.commands.registerCommand('codecount.gitRepoMissing', () => {
+		vscode.window.showWarningMessage('Git repo hasn’t been defined.');
+	});
+
 	const openContributorFile = vscode.commands.registerCommand(
 		'codecount.openContributorFile',
 		async (args?: { author?: string; filePath?: string }) => {
@@ -91,6 +95,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 			const absolutePath = vscode.Uri.file(path.join(rootPath, filePath));
 			try {
+				await vscode.workspace.fs.stat(absolutePath);
 				const document = await vscode.workspace.openTextDocument(absolutePath);
 				await vscode.window.showTextDocument(document, { preview: false });
 			} catch {
@@ -142,11 +147,11 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(fileslines);
 	context.subscriptions.push(fileslinesByExtension);
 	context.subscriptions.push(refreshStats);
+	context.subscriptions.push(gitRepoMissing);
 	context.subscriptions.push(openContributorFile);
 	context.subscriptions.push(
 		vscode.window.registerTreeDataProvider('codecount.stats', statsProvider)
 	);
 }
 
-// This method is called when your extension is deactivated
 export function deactivate() {}

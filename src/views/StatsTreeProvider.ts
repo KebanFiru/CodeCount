@@ -26,7 +26,8 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 		if (!element) {
 			return [
 				new StatsNode('languages', 'Languages', vscode.TreeItemCollapsibleState.Collapsed),
-				new StatsNode('contributors', 'Contributors', vscode.TreeItemCollapsibleState.Collapsed)
+				new StatsNode('contributors', 'Contributors (Workspace)', vscode.TreeItemCollapsibleState.Collapsed),
+				new StatsNode('contributorsAll', 'Contributors (All)', vscode.TreeItemCollapsibleState.Collapsed)
 			];
 		}
 
@@ -38,8 +39,15 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			return this.getContributorNodes();
 		}
 
+		if (element.kind === 'contributorsAll') {
+			return this.getContributorAllNodes();
+		}
+
 		if (element.kind === 'contributor') {
 			return this.getContributorLanguageNodes(element.value ?? String(element.label));
+		}
+		if (element.kind === 'contributorAll') {
+			return [];
 		}
 
 		if (element.kind === 'contributorLanguage') {
@@ -91,7 +99,7 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 	private async getContributorNodes(): Promise<StatsNode[]> {
 		const result = await this.statsService.getContributorStats();
 		if (!result.available) {
-			return [new StatsNode('info', 'Git repository not found', vscode.TreeItemCollapsibleState.None)];
+			return [this.createGitMissingNode()];
 		}
 		if (result.stats.length === 0) {
 			return [new StatsNode('info', 'No Git history available', vscode.TreeItemCollapsibleState.None)];
@@ -104,6 +112,35 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			node.tooltip = `${entry.linesAdded} lines added by ${entry.name}`;
 			return node;
 		});
+	}
+
+	private async getContributorAllNodes(): Promise<StatsNode[]> {
+		const result = await this.statsService.getContributorStatsAll();
+		if (!result.available) {
+			return [this.createGitMissingNode()];
+		}
+		if (result.stats.length === 0) {
+			return [new StatsNode('info', 'No Git history available', vscode.TreeItemCollapsibleState.None)];
+		}
+
+		return result.stats.map((entry) => {
+			const description = `${entry.linesAdded} lines`;
+			const node = new StatsNode('contributorAll', entry.name, vscode.TreeItemCollapsibleState.None);
+			node.description = description;
+			node.tooltip = `${entry.linesAdded} lines added by ${entry.name}`;
+			return node;
+		});
+	}
+
+	private createGitMissingNode(): StatsNode {
+		const node = new StatsNode('info', 'Git repo hasn’t been defined', vscode.TreeItemCollapsibleState.None);
+		node.description = 'Git repo required';
+		node.tooltip = 'Git repo hasn’t been defined';
+		node.command = {
+			command: 'codecount.gitRepoMissing',
+			title: 'Git repo hasn’t been defined'
+		};
+		return node;
 	}
 
 	private async getContributorLanguageNodes(authorName: string): Promise<StatsNode[]> {
@@ -143,13 +180,23 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			return [new StatsNode('info', 'No file stats available', vscode.TreeItemCollapsibleState.None)];
 		}
 
+		const rootPath = await this.statsService.getGitRootPath();
+		if (!rootPath) {
+			return [new StatsNode('info', 'Git repository not found', vscode.TreeItemCollapsibleState.None)];
+		}
+
+		const existingStats = await this.filterExistingFiles(rootPath, result.stats);
+		if (existingStats.length === 0) {
+			return [new StatsNode('info', 'No files found in workspace', vscode.TreeItemCollapsibleState.None)];
+		}
+
 		const infoNode = new StatsNode(
 			'info',
 			'Showing top 10 files by changes',
 			vscode.TreeItemCollapsibleState.None
 		);
 
-		const fileNodes = result.stats.slice(0, 10).map((entry) => {
+		const fileNodes = existingStats.slice(0, 10).map((entry) => {
 			const description = `+${entry.added} -${entry.deleted}`;
 			const node = new StatsNode(
 				'contributorFile',
@@ -171,6 +218,27 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 		return [infoNode, ...fileNodes];
 	}
 
+	private async filterExistingFiles(
+		rootPath: string,
+		stats: Array<{ filePath: string; added: number; deleted: number }>
+	): Promise<Array<{ filePath: string; added: number; deleted: number }>> {
+		const checks = await Promise.all(
+			stats.map(async (entry) => {
+				const absolutePath = vscode.Uri.file(path.join(rootPath, entry.filePath));
+				try {
+					await vscode.workspace.fs.stat(absolutePath);
+					return entry;
+				} catch {
+					return null;
+				}
+			})
+		);
+
+		return checks.filter(
+			(entry): entry is { filePath: string; added: number; deleted: number } => entry !== null
+		);
+	}
+
 	private formatLanguageLabel(languageId: string): string {
 		if (!languageId) {
 			return 'Unknown';
@@ -185,14 +253,14 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 
 export class StatsNode extends vscode.TreeItem {
 	constructor(
-		public readonly kind: 'languages' | 'contributors' | 'language' | 'contributor' | 'contributorLanguage' | 'contributorFile' | 'info',
+		public readonly kind: 'languages' | 'contributors' | 'contributorsAll' | 'language' | 'contributor' | 'contributorAll' | 'contributorLanguage' | 'contributorFile' | 'info',
 		label: string,
 		collapsibleState: vscode.TreeItemCollapsibleState,
 		public readonly value?: string,
 		public readonly meta?: { author?: string; languageId?: string; filePath?: string; added?: number; deleted?: number }
 	) {
 		super(label, collapsibleState);
-		if (kind === 'languages' || kind === 'contributors') {
+		if (kind === 'languages' || kind === 'contributors' || kind === 'contributorsAll') {
 			this.iconPath = new vscode.ThemeIcon('graph');
 		}
 		if (kind === 'info') {

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { StatsService } from '../services/StatsService';
-import type { ContributorStat, LanguageStat } from './stats';
+import type { ContributorStat, LanguageStat } from '../types';
 
 export class StatsWebviewPanel {
 	private static currentPanel: StatsWebviewPanel | undefined;

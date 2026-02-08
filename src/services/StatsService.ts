@@ -11,7 +11,7 @@ import type {
 	ContributorStatsResult,
 	LanguageStat,
 	LanguageStatsResult
-} from '../views/stats';
+} from '../types';
 
 const GIT_AUTHOR_PREFIX = '--AUTHOR--';
 
@@ -41,10 +41,14 @@ export class StatsService {
 
 		const stats = new Map<string, number>();
 		for (const uri of filtered) {
-			const document = await vscode.workspace.openTextDocument(uri);
-			const languageId = document.languageId || 'unknown';
-			const codeLines = this.lineCounter.countDocumentLines(document);
-			stats.set(languageId, (stats.get(languageId) ?? 0) + codeLines);
+			try {
+				const document = await vscode.workspace.openTextDocument(uri);
+				const languageId = document.languageId || 'unknown';
+				const codeLines = this.lineCounter.countDocumentLines(document);
+				stats.set(languageId, (stats.get(languageId) ?? 0) + codeLines);
+			} catch {
+				continue;
+			}
 		}
 
 		const entries = Array.from(stats.entries())
@@ -68,6 +72,22 @@ export class StatsService {
 		let stats: Array<{ name: string; linesAdded: number }> = [];
 		try {
 			stats = await this.getContributorStatsFromGit(rootPath);
+		} catch {
+			return { available: true, stats: [] };
+		}
+
+		return { available: true, stats };
+	}
+
+	async getContributorStatsAll(): Promise<ContributorStatsResult> {
+		const rootPath = await this.getGitRoot();
+		if (!rootPath) {
+			return { available: false, stats: [] };
+		}
+
+		let stats: Array<{ name: string; linesAdded: number }> = [];
+		try {
+			stats = await this.getContributorStatsFromGitAll(rootPath);
 		} catch {
 			return { available: true, stats: [] };
 		}
@@ -191,6 +211,53 @@ export class StatsService {
 		);
 
 		const stats = new Map<string, number>();
+		const existsCache = new Map<string, boolean>();
+		let currentAuthor = 'Unknown';
+		const lines = output.split(/\r?\n/);
+		for (const line of lines) {
+			if (line.startsWith(GIT_AUTHOR_PREFIX)) {
+				currentAuthor = line.slice(GIT_AUTHOR_PREFIX.length).trim() || 'Unknown';
+				if (!stats.has(currentAuthor)) {
+					stats.set(currentAuthor, 0);
+				}
+				continue;
+			}
+
+			if (!line.trim()) {
+				continue;
+			}
+
+			const [addedText, , filePath] = line.split('\t');
+			if (!addedText || addedText === '-' || !filePath) {
+				continue;
+			}
+
+			const normalizedPath = this.normalizeGitPath(filePath);
+			const exists = await this.fileExists(rootPath, normalizedPath, existsCache);
+			if (!exists) {
+				continue;
+			}
+
+			const added = Number(addedText);
+			if (Number.isNaN(added)) {
+				continue;
+			}
+
+			stats.set(currentAuthor, (stats.get(currentAuthor) ?? 0) + added);
+		}
+
+		return Array.from(stats.entries())
+			.map(([name, linesAdded]) => ({ name, linesAdded }))
+			.sort((a, b) => b.linesAdded - a.linesAdded);
+	}
+
+	private async getContributorStatsFromGitAll(rootPath: string): Promise<ContributorStat[]> {
+		const output = await this.execGit(
+			['log', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an`],
+			rootPath
+		);
+
+		const stats = new Map<string, number>();
 		let currentAuthor = 'Unknown';
 		const lines = output.split(/\r?\n/);
 		for (const line of lines) {
@@ -235,6 +302,7 @@ export class StatsService {
 
 		const languageTotals = new Map<string, number>();
 		const languageByPath = new Map<string, string>();
+		const existsCache = new Map<string, boolean>();
 		let currentAuthor = 'Unknown';
 		const lines = output.split(/\r?\n/);
 		for (const line of lines) {
@@ -262,6 +330,10 @@ export class StatsService {
 			}
 
 			const normalizedPath = this.normalizeGitPath(filePath);
+			const exists = await this.fileExists(rootPath, normalizedPath, existsCache);
+			if (!exists) {
+				continue;
+			}
 			const languageId = await this.getLanguageForPath(rootPath, normalizedPath, languageByPath);
 			languageTotals.set(languageId, (languageTotals.get(languageId) ?? 0) + added);
 		}
@@ -283,6 +355,7 @@ export class StatsService {
 
 		const fileTotals = new Map<string, { added: number; deleted: number }>();
 		const languageByPath = new Map<string, string>();
+		const existsCache = new Map<string, boolean>();
 		let currentAuthor = 'Unknown';
 		const lines = output.split(/\r?\n/);
 		for (const line of lines) {
@@ -314,6 +387,10 @@ export class StatsService {
 			}
 
 			const normalizedPath = this.normalizeGitPath(filePath);
+			const exists = await this.fileExists(rootPath, normalizedPath, existsCache);
+			if (!exists) {
+				continue;
+			}
 			const fileLanguageId = await this.getLanguageForPath(rootPath, normalizedPath, languageByPath);
 			if (fileLanguageId !== languageId) {
 				continue;
@@ -361,6 +438,27 @@ export class StatsService {
 
 		cache.set(filePath, languageId);
 		return languageId;
+	}
+
+	private async fileExists(
+		rootPath: string,
+		filePath: string,
+		cache: Map<string, boolean>
+	): Promise<boolean> {
+		if (cache.has(filePath)) {
+			return cache.get(filePath) ?? false;
+		}
+		const absolutePath = path.isAbsolute(filePath)
+			? filePath
+			: path.join(rootPath, filePath);
+		try {
+			await vscode.workspace.fs.stat(vscode.Uri.file(absolutePath));
+			cache.set(filePath, true);
+			return true;
+		} catch {
+			cache.set(filePath, false);
+			return false;
+		}
 	}
 
 	private languageFromExtension(filePath: string): string {
