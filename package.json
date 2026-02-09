@@ -12,15 +12,31 @@
   "activationEvents": [
     "onCommand:codecount.countLines",
     "onCommand:codecount.countFilesLines",
-    "onCommand:codecount.countLinesByExtension"
+    "onCommand:codecount.countLinesByExtension",
+    "onCommand:codecount.refreshStats",
+    "onCommand:codecount.gitRepoMissing",
+    "onView:codecount.stats"
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codecount",
+          "title": "CodeCount",
+          "icon": "resources/codecount.svg"
+        }
+      ]
+    },
+    "views": {
+      "codecount": [
+        {
+          "id": "codecount.stats",
+          "name": "CodeCount"
+        }
+      ]
+    },
     "commands": [
-      {
-        "command": "codecount.helloWorld",
-        "title": "Hello World"
-      },
       {
         "command": "codecount.countLines",
         "title": "Count Lines of Code"
@@ -32,8 +48,25 @@
       {
         "command": "codecount.countLinesByExtension",
         "title": "Count Lines of Code by Extension"
+      },
+      {
+        "command": "codecount.refreshStats",
+        "title": "Refresh CodeCount Stats"
+      },
+      {
+        "command": "codecount.gitRepoMissing",
+        "title": "Git Repo Missing"
       }
-    ]
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "codecount.refreshStats",
+          "when": "view == codecount.stats",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
