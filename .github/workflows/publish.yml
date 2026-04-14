@@ -26,15 +26,31 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install --frozen-lockfile
+        run: |
+          npm ci --silent >/dev/null 2>&1 || {
+            echo "Install step failed." >&2
+            exit 1
+          }
 
       - name: Build
-        run: npm run compile
+        run: |
+          npm run compile --silent >/dev/null 2>&1 || {
+            echo "Build step failed." >&2
+            exit 1
+          }
 
       - name: Lint
-        run: npm run lint
+        run: |
+          npm run lint --silent >/dev/null 2>&1 || {
+            echo "Lint step failed." >&2
+            exit 1
+          }
 
       - name: Publish to VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx @vscode/vsce publish -p "$VSCE_PAT"
+        run: |
+          npx --yes @vscode/vsce publish -p "$VSCE_PAT" >/dev/null 2>&1 || {
+            echo "Publish step failed." >&2
+            exit 1
+          }
