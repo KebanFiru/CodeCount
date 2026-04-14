@@ -2,7 +2,17 @@
   "name": "codecount",
   "displayName": "CodeCount",
   "description": "A tool for learn how much line of code your project contains",
-  "version": "0.0.1",
+  "version": "1.0.0",
+  "publisher": "KebanFiru",
+  "license": "MIT",
+  "homepage": "https://github.com/KebanFiru/CodeCount#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KebanFiru/CodeCount.git"
+  },
+  "bugs": {
+    "url": "https://github.com/KebanFiru/CodeCount/issues"
+  },
   "engines": {
     "vscode": "^1.108.2"
   },
