@@ -23,11 +23,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Install dependencies
         run: |
-          npm ci --silent >/dev/null 2>&1 || {
+          npm install --silent >/dev/null 2>&1 || {
             echo "Install step failed." >&2
             exit 1
           }
