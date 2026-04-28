@@ -126,11 +126,13 @@ export function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			const gitPath = path.join(rootPath, filePath);
+			const gitPath = path.isAbsolute(filePath) ? filePath : path.join(rootPath, filePath);
+			const fileUri = vscode.Uri.file(gitPath);
 			const encode = (ref: string) =>
-				vscode.Uri.parse(
-					`git:${gitPath}?${encodeURIComponent(JSON.stringify({ path: gitPath, ref }))}`
-				);
+				fileUri.with({
+					scheme: 'git',
+					query: JSON.stringify({ path: fileUri.fsPath, ref })
+				});
 
 			const left = encode(`${pick.hash}^`);
 			const right = encode(pick.hash);
