@@ -24,11 +24,28 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 		}
 
 		if (!element) {
-			return [
+			// Root level - simplified: dashboard and main data sections
+			const nodes: StatsNode[] = [];
+
+			const dashboardNode = new StatsNode(
+				'dashboard',
+				'Open Analytics Dashboard',
+				vscode.TreeItemCollapsibleState.None
+			);
+			dashboardNode.command = {
+				command: 'codecount.openAnalytics',
+				title: 'Open Analytics Dashboard'
+			};
+			nodes.push(dashboardNode);
+
+			// Data sections - clean and minimal
+			nodes.push(
 				new StatsNode('languages', 'Languages', vscode.TreeItemCollapsibleState.Collapsed),
-				new StatsNode('contributors', 'Contributors (Workspace)', vscode.TreeItemCollapsibleState.Collapsed),
-				new StatsNode('contributorsAll', 'Contributors (All)', vscode.TreeItemCollapsibleState.Collapsed)
-			];
+				new StatsNode('contributors', 'Contributors', vscode.TreeItemCollapsibleState.Collapsed),
+				new StatsNode('contributorsAll', 'All Contributors', vscode.TreeItemCollapsibleState.Collapsed)
+			);
+
+			return nodes;
 		}
 
 		if (element.kind === 'languages') {
@@ -41,6 +58,11 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 
 		if (element.kind === 'contributorsAll') {
 			return this.getContributorAllNodes();
+		}
+
+		if (element.kind === 'language') {
+			const languageId = element.meta?.languageId ?? element.value ?? '';
+			return this.getLanguageFileNodes(languageId);
 		}
 
 		if (element.kind === 'contributor') {
@@ -78,22 +100,74 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			return [new StatsNode('info', 'No code lines found', vscode.TreeItemCollapsibleState.None)];
 		}
 
-		const totalLines = result.stats.reduce((sum, item) => sum + item.lines, 0);
+		const filteredStats = result.stats.filter(item => item.languageId !== 'ignore');
+		const totalLines = filteredStats.reduce((sum, item) => sum + item.lines, 0);
+
 		const totalNode = new StatsNode(
 			'info',
-			`Total code lines: ${totalLines}`,
+			`Total code lines: ${totalLines.toLocaleString()}`,
 			vscode.TreeItemCollapsibleState.None
 		);
+		totalNode.description = `${filteredStats.length} languages`;
 
-		const languageNodes = result.stats.map(({ languageId, lines }) => {
-			const description = `${lines} lines`;
-			const node = new StatsNode('language', this.formatLanguageLabel(languageId), vscode.TreeItemCollapsibleState.None);
+		const languageNodes = filteredStats.map(({ languageId, lines }, index) => {
+			const percent = totalLines > 0 ? Math.round((lines / totalLines) * 100) : 0;
+			const description = `${lines.toLocaleString()} lines (${percent}%)`;
+			const langName = this.getLanguageFullName(languageId);
+			const node = new StatsNode(
+				'language',
+				`${langName}`,
+				vscode.TreeItemCollapsibleState.Collapsed,
+				undefined,
+				{ languageId }
+			);
 			node.description = description;
-			node.tooltip = `${lines} code lines in ${languageId}`;
+			node.tooltip = `${lines.toLocaleString()} lines (${percent}%) in ${langName}`;
 			return node;
 		});
 
 		return [totalNode, ...languageNodes];
+	}
+
+	private getLanguageFullName(languageId: string): string {
+		const names: Record<string, string> = {
+			typescript: 'TypeScript',
+			typescriptreact: 'TypeScript React',
+			javascript: 'JavaScript',
+			javascriptreact: 'JavaScript React',
+			python: 'Python',
+			java: 'Java',
+			csharp: 'C#',
+			cpp: 'C++',
+			c: 'C',
+			rust: 'Rust',
+			go: 'Go',
+			kotlin: 'Kotlin',
+			swift: 'Swift',
+			objective_c: 'Objective-C',
+			php: 'PHP',
+			ruby: 'Ruby',
+			perl: 'Perl',
+			scala: 'Scala',
+			r: 'R',
+			sql: 'SQL',
+			html: 'HTML',
+			css: 'CSS',
+			scss: 'SCSS',
+			less: 'Less',
+			sass: 'SASS',
+			xml: 'XML',
+			json: 'JSON',
+			jsonc: 'JSON with Comments',
+			yaml: 'YAML',
+			yml: 'YAML',
+			toml: 'TOML',
+			markdown: 'Markdown',
+			md: 'Markdown',
+			plaintext: 'Plain Text',
+			ignore: 'Ignore File',
+		};
+		return names[languageId.toLowerCase()] || this.formatLanguageLabel(languageId);
 	}
 
 	private async getContributorNodes(): Promise<StatsNode[]> {
@@ -105,13 +179,22 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			return [new StatsNode('info', 'No Git history available', vscode.TreeItemCollapsibleState.None)];
 		}
 
-		return result.stats.map((entry) => {
-			const description = `${entry.linesAdded} lines`;
+		const totalLines = result.stats.reduce((sum, s) => sum + s.linesAdded, 0);
+		const totalNode = new StatsNode(
+			'info',
+			`Total contributors: ${result.stats.length}`,
+			vscode.TreeItemCollapsibleState.None
+		);
+		totalNode.description = `${totalLines.toLocaleString()} total lines`;
+
+		return [totalNode, ...result.stats.map((entry) => {
+			const percent = Math.round((entry.linesAdded / totalLines) * 100);
+			const description = `${entry.linesAdded.toLocaleString()} lines (${percent}%)`;
 			const node = new StatsNode('contributor', entry.name, vscode.TreeItemCollapsibleState.Collapsed, entry.name);
 			node.description = description;
-			node.tooltip = `${entry.linesAdded} lines added by ${entry.name}`;
+			node.tooltip = `${entry.linesAdded.toLocaleString()} lines added by ${entry.name}\nWorkspace changes`;
 			return node;
-		});
+		})];
 	}
 
 	private async getContributorAllNodes(): Promise<StatsNode[]> {
@@ -123,13 +206,22 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			return [new StatsNode('info', 'No Git history available', vscode.TreeItemCollapsibleState.None)];
 		}
 
-		return result.stats.map((entry) => {
-			const description = `${entry.linesAdded} lines`;
+		const totalLines = result.stats.reduce((sum, s) => sum + s.linesAdded, 0);
+		const totalNode = new StatsNode(
+			'info',
+			`Total contributors (all): ${result.stats.length}`,
+			vscode.TreeItemCollapsibleState.None
+		);
+		totalNode.description = `${totalLines.toLocaleString()} total lines (repository)`;
+
+		return [totalNode, ...result.stats.map((entry) => {
+			const percent = Math.round((entry.linesAdded / totalLines) * 100);
+			const description = `${entry.linesAdded.toLocaleString()} lines (${percent}%)`;
 			const node = new StatsNode('contributorAll', entry.name, vscode.TreeItemCollapsibleState.None);
 			node.description = description;
-			node.tooltip = `${entry.linesAdded} lines added by ${entry.name}`;
+			node.tooltip = `${entry.linesAdded.toLocaleString()} lines added to entire repository`;
 			return node;
-		});
+		})];
 	}
 
 	private createGitMissingNode(): StatsNode {
@@ -218,6 +310,47 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 		return [infoNode, ...fileNodes];
 	}
 
+	private async getLanguageFileNodes(languageId: string): Promise<StatsNode[]> {
+		if (!languageId) {
+			return [new StatsNode('info', 'No language selected', vscode.TreeItemCollapsibleState.None)];
+		}
+
+		const result = await this.statsService.getLanguageFileStats(languageId);
+		if (!result.available) {
+			return [new StatsNode('info', 'Open a workspace to see stats', vscode.TreeItemCollapsibleState.None)];
+		}
+		if (result.stats.length === 0) {
+			return [new StatsNode('info', 'No files found for this language', vscode.TreeItemCollapsibleState.None)];
+		}
+
+		const infoNode = new StatsNode(
+			'info',
+			`Showing ${result.stats.length.toLocaleString()} files by lines`,
+			vscode.TreeItemCollapsibleState.None
+		);
+
+		const fileNodes = result.stats.map((entry) => {
+			const node = new StatsNode(
+				'languageFile',
+				path.basename(entry.filePath),
+				vscode.TreeItemCollapsibleState.None,
+				undefined,
+				{ filePath: entry.filePath, absolutePath: entry.absolutePath }
+			);
+			node.description = `${entry.lines.toLocaleString()} lines`;
+			node.tooltip = entry.filePath;
+			node.resourceUri = vscode.Uri.file(entry.absolutePath);
+			node.command = {
+				command: 'vscode.open',
+				title: 'Open File',
+				arguments: [node.resourceUri]
+			};
+			return node;
+		});
+
+		return [infoNode, ...fileNodes];
+	}
+
 	private async filterExistingFiles(
 		rootPath: string,
 		stats: Array<{ filePath: string; added: number; deleted: number }>
@@ -253,13 +386,16 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 
 export class StatsNode extends vscode.TreeItem {
 	constructor(
-		public readonly kind: 'languages' | 'contributors' | 'contributorsAll' | 'language' | 'contributor' | 'contributorAll' | 'contributorLanguage' | 'contributorFile' | 'info',
+		public readonly kind: 'dashboard' | 'languages' | 'contributors' | 'contributorsAll' | 'language' | 'languageFile' | 'contributor' | 'contributorAll' | 'contributorLanguage' | 'contributorFile' | 'info',
 		label: string,
 		collapsibleState: vscode.TreeItemCollapsibleState,
 		public readonly value?: string,
-		public readonly meta?: { author?: string; languageId?: string; filePath?: string; added?: number; deleted?: number }
+		public readonly meta?: { author?: string; languageId?: string; filePath?: string; absolutePath?: string; added?: number; deleted?: number }
 	) {
 		super(label, collapsibleState);
+		if (kind === 'dashboard') {
+			this.iconPath = new vscode.ThemeIcon('open-preview');
+		}
 		if (kind === 'languages' || kind === 'contributors' || kind === 'contributorsAll') {
 			this.iconPath = new vscode.ThemeIcon('graph');
 		}

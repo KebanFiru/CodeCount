@@ -6,6 +6,7 @@ import { WorkspaceLineCounter } from './services/WorkspaceLineCounter';
 import { LineCounterByFileFormat } from './services/LineCounterByFileFormat';
 import { StatsTreeProvider } from './views/StatsTreeProvider';
 import { StatsService } from './services/StatsService';
+import { StatsWebviewPanel } from './views/StatsWebviewPanel';
 
 export function activate(context: vscode.ExtensionContext) {
 	const lineCounter = new LineCounter();
@@ -73,6 +74,11 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const refreshStats = vscode.commands.registerCommand('codecount.refreshStats', () => {
 		statsProvider.refresh();
+		StatsWebviewPanel.refreshIfOpen();
+	});
+
+	const openAnalytics = vscode.commands.registerCommand('codecount.openAnalytics', () => {
+		StatsWebviewPanel.createOrShow(context.extensionUri, statsService);
 	});
 
 	const gitRepoMissing = vscode.commands.registerCommand('codecount.gitRepoMissing', () => {
@@ -149,6 +155,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(fileslines);
 	context.subscriptions.push(fileslinesByExtension);
 	context.subscriptions.push(refreshStats);
+	context.subscriptions.push(openAnalytics);
 	context.subscriptions.push(gitRepoMissing);
 	context.subscriptions.push(openContributorFile);
 	context.subscriptions.push(

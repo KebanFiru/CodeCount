@@ -64,6 +64,10 @@
         "title": "Refresh CodeCount Stats"
       },
       {
+        "command": "codecount.openAnalytics",
+        "title": "Open Analytics Dashboard"
+      },
+      {
         "command": "codecount.gitRepoMissing",
         "title": "Git Repo Missing"
       }

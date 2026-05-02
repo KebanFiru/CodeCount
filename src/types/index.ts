@@ -6,6 +6,10 @@ export type {
 	ContributorLanguageStat,
 	ContributorStat,
 	ContributorStatsResult,
+	RepoAnalyticsResult,
+	RepoCommitTrendStat,
+	RepoTopFileStat,
 	LanguageStat,
+	LanguageFileStat,
 	LanguageStatsResult
 } from './stats';

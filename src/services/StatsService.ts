@@ -10,10 +10,13 @@ import type {
 	ContributorStat,
 	ContributorStatsResult,
 	LanguageStat,
-	LanguageStatsResult
+	LanguageFileStat,
+	LanguageStatsResult,
+	RepoAnalyticsResult
 } from '../types';
 
 const GIT_AUTHOR_PREFIX = '--AUTHOR--';
+const GIT_COMMIT_PREFIX = '--COMMIT--';
 
 export class StatsService {
 	constructor(
@@ -60,6 +63,49 @@ export class StatsService {
 			totalFiles: files.length,
 			filteredFiles: filtered.length,
 			stats: entries
+		};
+	}
+
+	async getLanguageFileStats(languageId: string): Promise<{ available: boolean; stats: LanguageFileStat[] }> {
+		if (!vscode.workspace.workspaceFolders?.length) {
+			return { available: false, stats: [] };
+		}
+
+		const files = await vscode.workspace.findFiles(
+			'**/*',
+			'**/{node_modules,out,dist,.git}/**'
+		);
+		if (files.length === 0) {
+			return { available: true, stats: [] };
+		}
+
+		const filtered = await this.filterIgnoredFiles(files);
+		if (filtered.length === 0) {
+			return { available: true, stats: [] };
+		}
+
+		const stats: LanguageFileStat[] = [];
+		for (const uri of filtered) {
+			try {
+				const document = await vscode.workspace.openTextDocument(uri);
+				if (document.languageId !== languageId) {
+					continue;
+				}
+				const lines = this.lineCounter.countDocumentLines(document);
+				const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+				const rootPath = workspaceFolder?.uri.fsPath;
+				const relativePath = rootPath
+					? path.relative(rootPath, uri.fsPath).replace(/\\/g, '/')
+					: uri.fsPath;
+				stats.push({ filePath: relativePath, absolutePath: uri.fsPath, lines });
+			} catch {
+				continue;
+			}
+		}
+
+		return {
+			available: true,
+			stats: stats.sort((a, b) => b.lines - a.lines)
 		};
 	}
 
@@ -162,6 +208,236 @@ export class StatsService {
 			return { available: true, entries };
 		} catch {
 			return { available: true, entries: [] };
+		}
+	}
+
+	async getRepoAnalytics(): Promise<RepoAnalyticsResult> {
+		const rootPath = await this.getGitRoot();
+		if (!rootPath) {
+			return {
+				available: false,
+				totalCommits: 0,
+				activeDays: 0,
+				totalAdded: 0,
+				totalDeleted: 0,
+				avgLinesChangedPerCommit: 0,
+				commitsByDate: [],
+				commitsByMonth: [],
+				commitsByAuthor: [],
+				commitsByWeekday: Array.from({ length: 7 }, () => 0),
+				commitsByHour: Array.from({ length: 24 }, () => 0),
+				topChangedFiles: []
+			};
+		}
+
+		try {
+			const output = await this.execGit(
+				['log', '--date=iso-strict', `--pretty=${GIT_COMMIT_PREFIX}%aI|%an`, '--numstat'],
+				rootPath
+			);
+
+			const byDate = new Map<string, { commits: number; added: number; deleted: number }>();
+			const byMonth = new Map<string, { commits: number; added: number; deleted: number }>();
+			const byAuthor = new Map<string, { commits: number; added: number; deleted: number }>();
+			const byFile = new Map<string, { added: number; deleted: number }>();
+			const commitsByWeekday = Array.from({ length: 7 }, () => 0);
+			const commitsByHour = Array.from({ length: 24 }, () => 0);
+			let totalCommits = 0;
+			let totalAdded = 0;
+			let totalDeleted = 0;
+			let currentDateKey: string | undefined;
+			let currentMonthKey: string | undefined;
+			let currentAuthor: string | undefined;
+			let firstCommitDate: string | undefined;
+			let lastCommitDate: string | undefined;
+
+			const lines = output.split(/\r?\n/);
+			for (const line of lines) {
+				if (line.startsWith(GIT_COMMIT_PREFIX)) {
+					const payload = line.slice(GIT_COMMIT_PREFIX.length).trim();
+					const [dateTime, authorName] = payload.split('|');
+					if (!dateTime) {
+						currentDateKey = undefined;
+						currentMonthKey = undefined;
+						currentAuthor = undefined;
+						continue;
+					}
+
+					const dateKey = dateTime.slice(0, 10);
+					const monthKey = dateTime.slice(0, 7);
+					const author = (authorName ?? '').trim() || 'Unknown';
+					const date = new Date(dateTime);
+					if (Number.isNaN(date.getTime())) {
+						currentDateKey = undefined;
+						currentMonthKey = undefined;
+						currentAuthor = undefined;
+						continue;
+					}
+
+					const weekday = date.getDay();
+					const hourMatch = dateTime.match(/T(\d{2}):/);
+					const hour = hourMatch ? Number(hourMatch[1]) : date.getHours();
+
+					totalCommits += 1;
+					currentDateKey = dateKey;
+					currentMonthKey = monthKey;
+					currentAuthor = author;
+					commitsByWeekday[weekday] += 1;
+					if (hour >= 0 && hour < 24) {
+						commitsByHour[hour] += 1;
+					}
+
+					if (!lastCommitDate) {
+						lastCommitDate = dateKey;
+					}
+					firstCommitDate = dateKey;
+
+					const dateBucket = byDate.get(dateKey) ?? { commits: 0, added: 0, deleted: 0 };
+					dateBucket.commits += 1;
+					byDate.set(dateKey, dateBucket);
+
+					const monthBucket = byMonth.get(monthKey) ?? { commits: 0, added: 0, deleted: 0 };
+					monthBucket.commits += 1;
+					byMonth.set(monthKey, monthBucket);
+
+					const authorBucket = byAuthor.get(author) ?? { commits: 0, added: 0, deleted: 0 };
+					authorBucket.commits += 1;
+					byAuthor.set(author, authorBucket);
+					continue;
+				}
+
+				if (!currentDateKey || !currentMonthKey || !currentAuthor || !line.trim()) {
+					continue;
+				}
+
+				const [addedText, deletedText, filePath] = line.split('\t');
+				if (!addedText || !deletedText || !filePath || addedText === '-' || deletedText === '-') {
+					continue;
+				}
+
+				const added = Number(addedText);
+				const deleted = Number(deletedText);
+				if (Number.isNaN(added) || Number.isNaN(deleted)) {
+					continue;
+				}
+
+				totalAdded += added;
+				totalDeleted += deleted;
+
+				const dateBucket = byDate.get(currentDateKey);
+				if (dateBucket) {
+					dateBucket.added += added;
+					dateBucket.deleted += deleted;
+					byDate.set(currentDateKey, dateBucket);
+				}
+
+				const monthBucket = byMonth.get(currentMonthKey);
+				if (monthBucket) {
+					monthBucket.added += added;
+					monthBucket.deleted += deleted;
+					byMonth.set(currentMonthKey, monthBucket);
+				}
+
+				const authorBucket = byAuthor.get(currentAuthor);
+				if (authorBucket) {
+					authorBucket.added += added;
+					authorBucket.deleted += deleted;
+					byAuthor.set(currentAuthor, authorBucket);
+				}
+
+				const normalizedPath = this.normalizeGitPath(filePath);
+				const fileBucket = byFile.get(normalizedPath) ?? { added: 0, deleted: 0 };
+				fileBucket.added += added;
+				fileBucket.deleted += deleted;
+				byFile.set(normalizedPath, fileBucket);
+			}
+
+			const commitsByDate = Array.from(byDate.entries())
+				.map(([date, value]) => ({
+					date,
+					commits: value.commits,
+					added: value.added,
+					deleted: value.deleted
+				}))
+				.sort((a, b) => a.date.localeCompare(b.date));
+
+			const commitsByMonth = Array.from(byMonth.entries())
+				.map(([month, value]) => ({
+					month,
+					commits: value.commits,
+					added: value.added,
+					deleted: value.deleted
+				}))
+				.sort((a, b) => a.month.localeCompare(b.month));
+
+			const commitsByAuthor = Array.from(byAuthor.entries())
+				.map(([author, value]) => ({
+					author,
+					commits: value.commits,
+					added: value.added,
+					deleted: value.deleted
+				}))
+				.sort((a, b) => b.commits - a.commits);
+
+			const topChangedFiles = Array.from(byFile.entries())
+				.map(([filePath, totals]) => ({
+					filePath,
+					changes: totals.added + totals.deleted,
+					added: totals.added,
+					deleted: totals.deleted
+				}))
+				.sort((a, b) => b.changes - a.changes)
+				.slice(0, 12);
+
+			let busiestDay: { date: string; commits: number } | undefined;
+			let mostChangedDay: { date: string; changes: number } | undefined;
+			for (const item of commitsByDate) {
+				if (!busiestDay || item.commits > busiestDay.commits) {
+					busiestDay = { date: item.date, commits: item.commits };
+				}
+				const changes = item.added + item.deleted;
+				if (!mostChangedDay || changes > mostChangedDay.changes) {
+					mostChangedDay = { date: item.date, changes };
+				}
+			}
+
+			const avgLinesChangedPerCommit = totalCommits > 0
+				? Math.round((totalAdded + totalDeleted) / totalCommits)
+				: 0;
+
+			return {
+				available: true,
+				totalCommits,
+				activeDays: commitsByDate.length,
+				firstCommitDate,
+				lastCommitDate,
+				totalAdded,
+				totalDeleted,
+				avgLinesChangedPerCommit,
+				busiestDay,
+				mostChangedDay,
+				commitsByDate,
+				commitsByMonth,
+				commitsByAuthor,
+				commitsByWeekday,
+				commitsByHour,
+				topChangedFiles
+			};
+		} catch {
+			return {
+				available: true,
+				totalCommits: 0,
+				activeDays: 0,
+				totalAdded: 0,
+				totalDeleted: 0,
+				avgLinesChangedPerCommit: 0,
+				commitsByDate: [],
+				commitsByMonth: [],
+				commitsByAuthor: [],
+				commitsByWeekday: Array.from({ length: 7 }, () => 0),
+				commitsByHour: Array.from({ length: 24 }, () => 0),
+				topChangedFiles: []
+			};
 		}
 	}
 
