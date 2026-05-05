@@ -179,15 +179,21 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			return [new StatsNode('info', 'No Git history available', vscode.TreeItemCollapsibleState.None)];
 		}
 
-		const totalChanges = result.stats.reduce((sum, s) => sum + (s.added + s.deleted), 0);
+		// Only include contributors with at least one change
+		const effectiveStats = result.stats.filter(s => (s.added + s.deleted) > 0);
+		if (effectiveStats.length === 0) {
+			return [new StatsNode('info', 'No contributors with changes found', vscode.TreeItemCollapsibleState.None)];
+		}
+
+		const totalChanges = effectiveStats.reduce((sum, s) => sum + (s.added + s.deleted), 0);
 		const totalNode = new StatsNode(
 			'info',
-			`Total contributors: ${result.stats.length}`,
+			`Total contributors: ${effectiveStats.length}`,
 			vscode.TreeItemCollapsibleState.None
 		);
 		totalNode.description = `${totalChanges.toLocaleString()} total changes`;
 
-		return [totalNode, ...result.stats.map((entry) => {
+		return [totalNode, ...effectiveStats.map((entry) => {
 			const entryTotal = entry.added + entry.deleted;
 			const percent = totalChanges > 0 ? Math.round((entryTotal / totalChanges) * 100) : 0;
 			const description = `${entryTotal.toLocaleString()} changes (${percent}%)`;
@@ -207,15 +213,21 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			return [new StatsNode('info', 'No Git history available', vscode.TreeItemCollapsibleState.None)];
 		}
 
-		const totalChanges = result.stats.reduce((sum, s) => sum + (s.added + s.deleted), 0);
+		// Only include contributors with recorded changes across repository history
+		const effectiveStats = result.stats.filter(s => (s.added + s.deleted) > 0);
+		if (effectiveStats.length === 0) {
+			return [new StatsNode('info', 'No contributors with changes found', vscode.TreeItemCollapsibleState.None)];
+		}
+
+		const totalChanges = effectiveStats.reduce((sum, s) => sum + (s.added + s.deleted), 0);
 		const totalNode = new StatsNode(
 			'info',
-			`Total contributors (all): ${result.stats.length}`,
+			`Total contributors (all): ${effectiveStats.length}`,
 			vscode.TreeItemCollapsibleState.None
 		);
 		totalNode.description = `${totalChanges.toLocaleString()} total changes (repository)`;
 
-		return [totalNode, ...result.stats.map((entry) => {
+		return [totalNode, ...effectiveStats.map((entry) => {
 			const entryTotal = entry.added + entry.deleted;
 			const percent = totalChanges > 0 ? Math.round((entryTotal / totalChanges) * 100) : 0;
 			const description = `${entryTotal.toLocaleString()} changes (${percent}%)`;

@@ -551,6 +551,8 @@ export class StatsService {
 
 		return Array.from(stats.entries())
 			.map(([name, v]) => ({ name, added: v.added, deleted: v.deleted }))
+			// Filter out authors with no recorded changes (added + deleted === 0)
+			.filter(item => (item.added + item.deleted) > 0)
 			.sort((a, b) => (b.added + b.deleted) - (a.added + a.deleted));
 	}
 
@@ -599,6 +601,8 @@ export class StatsService {
 
 		return Array.from(stats.entries())
 			.map(([name, v]) => ({ name, added: v.added, deleted: v.deleted }))
+			// Exclude authors with zero total changes when aggregating across all refs
+			.filter(item => (item.added + item.deleted) > 0)
 			.sort((a, b) => (b.added + b.deleted) - (a.added + a.deleted));
 	}
 

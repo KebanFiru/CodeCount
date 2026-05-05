@@ -29,7 +29,8 @@ export const renderRepoAnalytics = (result: RepoAnalyticsResult): string => {
     const monthLabels = result.commitsByMonth.map(item => item.month);
     const monthCommitData = result.commitsByMonth.map(item => item.commits);
     const monthChangeData = result.commitsByMonth.map(item => item.added + item.deleted);
-    const topAuthors = result.commitsByAuthor.slice(0, 8);
+    const effectiveAuthors = result.commitsByAuthor.filter(a => (a.added + a.deleted) > 0);
+    const topAuthors = effectiveAuthors.slice(0, 8);
     const authorColors = generateColors(topAuthors.length);
     const authorLabels = topAuthors.map(item => escapeHtml(item.author));
     const authorCommitData = topAuthors.map(item => item.commits);
@@ -43,7 +44,7 @@ export const renderRepoAnalytics = (result: RepoAnalyticsResult): string => {
             <div class="metric-grid">
                 <div class="metric-card">
                     <div class="metric-title">Total Contributors</div>
-                    <div class="metric-value">${result.commitsByAuthor.length.toLocaleString()}</div>
+                    <div class="metric-value">${effectiveAuthors.length.toLocaleString()}</div>
                     <div class="metric-note">${result.totalAdded.toLocaleString()} added, ${result.totalDeleted.toLocaleString()} deleted</div>
                 </div>
                 <div class="metric-card">
