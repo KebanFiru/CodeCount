@@ -129,10 +129,14 @@ export class StatsWebviewPanel {
 			packGrid('.two-col-grid');
 		}
 
-		window.addEventListener('load', () => { setTimeout(runPack, 120); });
-		window.addEventListener('resize', () => { setTimeout(runPack, 120); });
+		window.__codecountRequestLayout = () => {
+			setTimeout(runPack, 120);
+		};
 
-		const mo = new MutationObserver(() => { setTimeout(runPack, 120); });
+		window.addEventListener('load', () => { window.__codecountRequestLayout?.(); });
+		window.addEventListener('resize', () => { window.__codecountRequestLayout?.(); });
+
+		const mo = new MutationObserver(() => { window.__codecountRequestLayout?.(); });
 		mo.observe(document.body, { childList: true, subtree: true, attributes: true });
 	})();
 	</script>

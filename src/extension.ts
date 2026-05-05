@@ -16,6 +16,45 @@ export function activate(context: vscode.ExtensionContext) {
 	const statsService = new StatsService(lineCounter, gitignoreService);
 	const statsProvider = new StatsTreeProvider(statsService);
 
+	let branchRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+	const scheduleBranchRefresh = () => {
+		if (branchRefreshTimer) {
+			clearTimeout(branchRefreshTimer);
+		}
+		branchRefreshTimer = setTimeout(() => {
+			gitignoreService.clearCache();
+			statsProvider.refresh();
+			StatsWebviewPanel.refreshIfOpen();
+			branchRefreshTimer = undefined;
+		}, 150);
+	};
+
+	void (async () => {
+		const gitDirPath = await statsService.getGitDirPath();
+		if (!gitDirPath) {
+			return;
+		}
+
+		const gitRoot = await statsService.getGitRootPath();
+		if (!gitRoot) {
+			return;
+		}
+
+		const watchers = [
+			vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(gitRoot, '.git/HEAD')),
+			vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(gitRoot, '.git/refs/heads/**')),
+			vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(gitRoot, '.git/packed-refs')),
+			vscode.workspace.createFileSystemWatcher('**/.gitignore')
+		];
+
+		for (const watcher of watchers) {
+			watcher.onDidChange(scheduleBranchRefresh, undefined, context.subscriptions);
+			watcher.onDidCreate(scheduleBranchRefresh, undefined, context.subscriptions);
+			watcher.onDidDelete(scheduleBranchRefresh, undefined, context.subscriptions);
+			context.subscriptions.push(watcher);
+		}
+	})();
+
 	const fileline = vscode.commands.registerCommand('codecount.countLines', () => {
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) {

@@ -179,20 +179,21 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			return [new StatsNode('info', 'No Git history available', vscode.TreeItemCollapsibleState.None)];
 		}
 
-		const totalLines = result.stats.reduce((sum, s) => sum + s.linesAdded, 0);
+		const totalChanges = result.stats.reduce((sum, s) => sum + (s.added + s.deleted), 0);
 		const totalNode = new StatsNode(
 			'info',
 			`Total contributors: ${result.stats.length}`,
 			vscode.TreeItemCollapsibleState.None
 		);
-		totalNode.description = `${totalLines.toLocaleString()} total lines`;
+		totalNode.description = `${totalChanges.toLocaleString()} total changes`;
 
 		return [totalNode, ...result.stats.map((entry) => {
-			const percent = Math.round((entry.linesAdded / totalLines) * 100);
-			const description = `${entry.linesAdded.toLocaleString()} lines (${percent}%)`;
+			const entryTotal = entry.added + entry.deleted;
+			const percent = totalChanges > 0 ? Math.round((entryTotal / totalChanges) * 100) : 0;
+			const description = `${entryTotal.toLocaleString()} changes (${percent}%)`;
 			const node = new StatsNode('contributor', entry.name, vscode.TreeItemCollapsibleState.Collapsed, entry.name);
 			node.description = description;
-			node.tooltip = `${entry.linesAdded.toLocaleString()} lines added by ${entry.name}\nWorkspace changes`;
+			node.tooltip = `+${entry.added.toLocaleString()} -${entry.deleted.toLocaleString()} by ${entry.name}\nWorkspace changes`;
 			return node;
 		})];
 	}
@@ -206,20 +207,21 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			return [new StatsNode('info', 'No Git history available', vscode.TreeItemCollapsibleState.None)];
 		}
 
-		const totalLines = result.stats.reduce((sum, s) => sum + s.linesAdded, 0);
+		const totalChanges = result.stats.reduce((sum, s) => sum + (s.added + s.deleted), 0);
 		const totalNode = new StatsNode(
 			'info',
 			`Total contributors (all): ${result.stats.length}`,
 			vscode.TreeItemCollapsibleState.None
 		);
-		totalNode.description = `${totalLines.toLocaleString()} total lines (repository)`;
+		totalNode.description = `${totalChanges.toLocaleString()} total changes (repository)`;
 
 		return [totalNode, ...result.stats.map((entry) => {
-			const percent = Math.round((entry.linesAdded / totalLines) * 100);
-			const description = `${entry.linesAdded.toLocaleString()} lines (${percent}%)`;
+			const entryTotal = entry.added + entry.deleted;
+			const percent = totalChanges > 0 ? Math.round((entryTotal / totalChanges) * 100) : 0;
+			const description = `${entryTotal.toLocaleString()} changes (${percent}%)`;
 			const node = new StatsNode('contributorAll', entry.name, vscode.TreeItemCollapsibleState.None);
 			node.description = description;
-			node.tooltip = `${entry.linesAdded.toLocaleString()} lines added to entire repository`;
+			node.tooltip = `+${entry.added.toLocaleString()} -${entry.deleted.toLocaleString()} in repository`;
 			return node;
 		})];
 	}

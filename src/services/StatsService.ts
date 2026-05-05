@@ -115,7 +115,7 @@ export class StatsService {
 			return { available: false, stats: [] };
 		}
 
-		let stats: Array<{ name: string; linesAdded: number }> = [];
+		let stats: ContributorStat[] = [];
 		try {
 			stats = await this.getContributorStatsFromGit(rootPath);
 		} catch {
@@ -131,7 +131,7 @@ export class StatsService {
 			return { available: false, stats: [] };
 		}
 
-		let stats: Array<{ name: string; linesAdded: number }> = [];
+		let stats: ContributorStat[] = [];
 		try {
 			stats = await this.getContributorStatsFromGitAll(rootPath);
 		} catch {
@@ -231,8 +231,11 @@ export class StatsService {
 		}
 
 		try {
+			// Limit log to the current branch (HEAD) and follow first-parent
+			// so repository metrics (total contributors, commits, etc.) are
+			// computed relative to the current branch only.
 			const output = await this.execGit(
-				['log', '--date=iso-strict', `--pretty=${GIT_COMMIT_PREFIX}%aI|%an`, '--numstat'],
+				['log', 'HEAD', '--first-parent', '--date=iso-strict', `--pretty=${GIT_COMMIT_PREFIX}%aI|%an`, '--numstat'],
 				rootPath
 			);
 
@@ -480,13 +483,30 @@ export class StatsService {
 		return this.getGitRoot();
 	}
 
+	async getGitDirPath(): Promise<string | undefined> {
+		const rootPath = await this.getGitRoot();
+		if (!rootPath) {
+			return;
+		}
+
+		try {
+			const gitDir = (await this.execGit(['rev-parse', '--git-dir'], rootPath)).trim();
+			if (!gitDir) {
+				return;
+			}
+			return path.isAbsolute(gitDir) ? gitDir : path.resolve(rootPath, gitDir);
+		} catch {
+			return;
+		}
+	}
+
 	private async getContributorStatsFromGit(rootPath: string): Promise<ContributorStat[]> {
 		const output = await this.execGit(
-			['log', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an`],
+			['log', 'HEAD', '--first-parent', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an`],
 			rootPath
 		);
 
-		const stats = new Map<string, number>();
+		const stats = new Map<string, { added: number; deleted: number }>();
 		const existsCache = new Map<string, boolean>();
 		let currentAuthor = 'Unknown';
 		const lines = output.split(/\r?\n/);
@@ -494,7 +514,7 @@ export class StatsService {
 			if (line.startsWith(GIT_AUTHOR_PREFIX)) {
 				currentAuthor = line.slice(GIT_AUTHOR_PREFIX.length).trim() || 'Unknown';
 				if (!stats.has(currentAuthor)) {
-					stats.set(currentAuthor, 0);
+					stats.set(currentAuthor, { added: 0, deleted: 0 });
 				}
 				continue;
 			}
@@ -503,7 +523,10 @@ export class StatsService {
 				continue;
 			}
 
-			const [addedText, , filePath] = line.split('\t');
+			const parts = line.split('\t');
+			const addedText = parts[0];
+			const deletedText = parts[1];
+			const filePath = parts[2];
 			if (!addedText || addedText === '-' || !filePath) {
 				continue;
 			}
@@ -515,32 +538,38 @@ export class StatsService {
 			}
 
 			const added = Number(addedText);
-			if (Number.isNaN(added)) {
+			const deleted = Number(deletedText ?? 0);
+			if (Number.isNaN(added) || Number.isNaN(deleted)) {
 				continue;
 			}
 
-			stats.set(currentAuthor, (stats.get(currentAuthor) ?? 0) + added);
+			const current = stats.get(currentAuthor) ?? { added: 0, deleted: 0 };
+			current.added += added;
+			current.deleted += deleted;
+			stats.set(currentAuthor, current);
 		}
 
 		return Array.from(stats.entries())
-			.map(([name, linesAdded]) => ({ name, linesAdded }))
-			.sort((a, b) => b.linesAdded - a.linesAdded);
+			.map(([name, v]) => ({ name, added: v.added, deleted: v.deleted }))
+			.sort((a, b) => (b.added + b.deleted) - (a.added + a.deleted));
 	}
 
 	private async getContributorStatsFromGitAll(rootPath: string): Promise<ContributorStat[]> {
+		// For "all" contributors we want to consider the entire repository
+		// history across all refs/branches. Use --all to include all refs.
 		const output = await this.execGit(
-			['log', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an`],
+			['log', '--all', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an`],
 			rootPath
 		);
 
-		const stats = new Map<string, number>();
+		const stats = new Map<string, { added: number; deleted: number }>();
 		let currentAuthor = 'Unknown';
 		const lines = output.split(/\r?\n/);
 		for (const line of lines) {
 			if (line.startsWith(GIT_AUTHOR_PREFIX)) {
 				currentAuthor = line.slice(GIT_AUTHOR_PREFIX.length).trim() || 'Unknown';
 				if (!stats.has(currentAuthor)) {
-					stats.set(currentAuthor, 0);
+					stats.set(currentAuthor, { added: 0, deleted: 0 });
 				}
 				continue;
 			}
@@ -549,22 +578,28 @@ export class StatsService {
 				continue;
 			}
 
-			const [addedText] = line.split('\t');
+			const parts = line.split('\t');
+			const addedText = parts[0];
+			const deletedText = parts[1];
 			if (!addedText || addedText === '-') {
 				continue;
 			}
 
 			const added = Number(addedText);
-			if (Number.isNaN(added)) {
+			const deleted = Number(deletedText ?? 0);
+			if (Number.isNaN(added) || Number.isNaN(deleted)) {
 				continue;
 			}
 
-			stats.set(currentAuthor, (stats.get(currentAuthor) ?? 0) + added);
+			const current = stats.get(currentAuthor) ?? { added: 0, deleted: 0 };
+			current.added += added;
+			current.deleted += deleted;
+			stats.set(currentAuthor, current);
 		}
 
 		return Array.from(stats.entries())
-			.map(([name, linesAdded]) => ({ name, linesAdded }))
-			.sort((a, b) => b.linesAdded - a.linesAdded);
+			.map(([name, v]) => ({ name, added: v.added, deleted: v.deleted }))
+			.sort((a, b) => (b.added + b.deleted) - (a.added + a.deleted));
 	}
 
 	private async getContributorLanguageStatsFromGit(
@@ -572,7 +607,7 @@ export class StatsService {
 		authorName: string
 	): Promise<ContributorLanguageStat[]> {
 		const output = await this.execGit(
-			['log', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an`],
+			['log', 'HEAD', '--first-parent', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an`],
 			rootPath
 		);
 
@@ -625,7 +660,7 @@ export class StatsService {
 		languageId: string
 	): Promise<ContributorFileStat[]> {
 		const output = await this.execGit(
-			['log', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an`],
+			['log', 'HEAD', '--first-parent', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an`],
 			rootPath
 		);
 

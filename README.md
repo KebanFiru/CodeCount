@@ -3,28 +3,39 @@
 <!-- Badges -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.108.2+-blue)](https://code.visualstudio.com/)
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/KebanFiru.CodeLineCounter?label=VS%20Marketplace&color=0078d7)](https://marketplace.visualstudio.com/items?itemName=KebanFiru.CodeLineCounter)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-blue)](https://www.typescriptlang.org/)
 
-> Quickly analyze your project's codebase by counting lines of code, comments, and get insights organized by file types.
+> Quickly analyze your project's codebase with comprehensive metrics, Git analytics, and interactive dashboards.
 
 ## Overview
 
-**CodeCount** is a powerful VS Code extension that provides comprehensive code metrics for your projects. Instantly see how many lines of code, comments, and blank lines your workspace contains. Get detailed breakdowns by file type, understand code distribution, and track your project's scale.
-
-Perfect for developers, project managers, and teams who need quick insights into codebase size and complexity.
+**CodeCount** is a powerful VS Code extension that provides deep insights into your codebase. Get instant metrics on lines of code, understand contributor activity, track commit trends, and visualize language distribution. Perfect for developers, project managers, and teams who need comprehensive codebase analytics.
 
 ## Features
 
-- **Workspace Analysis** - Get total line counts for your entire project
-- **File-by-File Breakdown** - See statistics for individual files
-- **Extension-Based Statistics** - Analyze code distribution across file types (TypeScript, JavaScript, Python, etc.)
-- **Comment Detection** - Identify and count comment lines separately
-- **Real-Time Refresh** - Update stats anytime with a single click
-- **Sidebar Integration** - Dedicated panel in VS Code's Activity Bar
-- **Gitignore Support** - Respects your `.gitignore` patterns automatically
-- **⏱Performance Optimized** - Fast analysis even for large projects
+###  Code Metrics
+- **Workspace Analysis** - Total line counts for entire projects
+- **File-by-File Breakdown** - Statistics for individual files
+- **Language Distribution** - Analyze code across file types with expandable lists
+- **Comment Detection** - Separate counts for comment and blank lines
+- **Gitignore Support** - Automatically respects `.gitignore` patterns
 
-## 📋 Commands
+###  Git Analytics (Repository View)
+- **Contributor Statistics** - Track contributions with added/deleted line counts
+- **Commit Trends** - Visualize commits, additions, and deletions over time
+- **Monthly Activity** - Monitor development activity by month
+- **Work Patterns** - Understand coding patterns by weekday and hour
+- **Repository Metrics** - Total contributors, commits, and lines changed
+
+###  Interactive Dashboard
+- **Real-Time Statistics Panel** - View metrics in VS Code sidebar
+- **Expandable Lists** - Top 3 preview with "Show all" toggle for contributors and languages
+- **Responsive Charts** - Full-width visualizations using Chart.js v4.4.0
+- **Dark Mode Support** - Optimized for VS Code themes with white text on dark backgrounds
+- **Performance Optimized** - Instant analysis even for large projects
+
+##  Commands
 
 Access CodeCount commands via the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
 
@@ -35,80 +46,48 @@ Access CodeCount commands via the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P
 | `CodeCount: Count Lines of Code by Extension` | Get breakdown by file type |
 | `CodeCount: Refresh CodeCount Stats` | Refresh sidebar statistics |
 
-## 📦 Requirements
+##  Requirements
 
 - **VS Code:** 1.108.2 or newer
-- **Git:** Required for repository recognition (optional, but recommended)
-
-## 🚀 Quick Start
-
-### Installation
-
-1. Open VS Code
-2. Go to Extensions (`Ctrl+Shift+X` / `Cmd+Shift+X`)
-3. Search for "CodeCount"
-4. Click **Install**
-5. Reload VS Code if prompted
+- **Git:** Required for repository analytics and contributor tracking
 
 ### Usage
 
-#### Method 1: Using Commands
+#### Method 1: Using Sidebar
+- Click the **CodeCount** icon in the Activity Bar (left sidebar)
+- View comprehensive statistics including:
+  - Stats overview grid
+  - Language distribution with breakdown
+  - Top contributors and their contributions
+  - Repository analytics and commit history
+
+#### Method 2: Using Commands
 - Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
 - Type "CodeCount" to see available commands
 - Select the command you want to run
 
-#### Method 2: Using Sidebar
-- Click the **CodeCount** icon in the Activity Bar (left sidebar)
-- View current statistics
-- Click the refresh button to update
+#### Dashboard Features
+- **Expandable Lists** - Click "Show all" to expand contributors or languages
+- **Interactive Charts** - Hover over visualizations for detailed information
+- **Full-Width Analytics** - View commit trends, monthly activity, and work patterns
+- **Real-Time Updates** - Click refresh to update statistics
 
-#### Example Output
-```
-Total lines in workspace (145 files): 25,847
-Comment lines: 3,421
-```
+##  Architecture
 
-## 🛠️ Development
+### Technology Stack
+- **Frontend:** HTML/CSS/JavaScript in VS Code Webview
+- **Charts:** Chart.js v4.4.0
+- **Language:** TypeScript with strict mode
+- **Styling:** CSS Grid layout with responsive design
+- **Git Integration:** Child process execution for git commands
 
-### Prerequisites
-- Node.js 18+
-- pnpm (recommended) or npm
-
-### Setup
-
-## 📚 Configuration
+##  Configuration
 
 CodeCount respects your project's `.gitignore` file, automatically excluding:
 - `node_modules/`
 - `dist/` and `build/`
 - `.git/` directories
 - And any patterns defined in `.gitignore`
-
-## 🤝 Contributing
-
-We welcome contributions! Here's how to help:
-
-### Getting Started
-1. **Fork** the repository
-2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
-3. **Make** your changes
-4. **Test** thoroughly
-5. **Commit** with clear messages: `git commit -m 'Add amazing feature'`
-6. **Push** to your branch: `git push origin feature/amazing-feature`
-7. **Open** a Pull Request
-
-### Development Guidelines
-- Follow TypeScript best practices
-- Keep code clean and well-documented
-- Run `pnpm run lint` before committing
-- Write meaningful commit messages
-- Test changes in the Extension Development Host
-
-### Code Style
-- Use TypeScript with strict mode enabled
-- Follow ESLint rules (run `pnpm run lint`)
-- Use descriptive variable and function names
-- Add comments for complex logic
 
 ##  License
 
@@ -126,15 +105,9 @@ Please include:
 - Steps to reproduce (for bugs)
 - Expected vs actual behavior
 - VS Code version and OS
+- Extension version
 
-## 📊Project Statistics
-
-- **Language:** TypeScript
-- **VS Code API:** 1.108.2+
-- **License:** MIT
-- **Status:** Active Development
-
-## 💬 Questions?
+##  Questions?
 
 Have questions? Feel free to:
 - Open a [Discussion](https://github.com/KebanFiru/CodeCount/discussions)
