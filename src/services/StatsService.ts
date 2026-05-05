@@ -522,12 +522,12 @@ export class StatsService {
 	private async getContributorStatsFromGit(rootPath: string): Promise<ContributorStat[]> {
 		// Use author email as the aggregation key to avoid duplicate names
 		const output = await this.execGit(
-			['log', 'HEAD', '--first-parent', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
+			// Include full history reachable from HEAD (include merges)
+			['log', 'HEAD', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
 			rootPath
 		);
 
 		const stats = new Map<string, { name: string; added: number; deleted: number }>();
-		const existsCache = new Map<string, boolean>();
 		let currentKey = 'unknown';
 		let currentName = 'Unknown';
 		const lines = output.split(/\r?\n/);
@@ -556,12 +556,8 @@ export class StatsService {
 				continue;
 			}
 
+			// Count changes even if the file no longer exists in the working tree
 			const normalizedPath = this.normalizeGitPath(filePath);
-			const exists = await this.fileExists(rootPath, normalizedPath, existsCache);
-			if (!exists) {
-				continue;
-			}
-
 			const added = Number(addedText);
 			const deleted = Number(deletedText ?? 0);
 			if (Number.isNaN(added) || Number.isNaN(deleted)) {
@@ -624,6 +620,7 @@ export class StatsService {
 				continue;
 			}
 
+			// Count changes even when files have been removed or renamed
 			const current = stats.get(currentKey) ?? { name: currentName, added: 0, deleted: 0 };
 			current.added += added;
 			current.deleted += deleted;
@@ -643,7 +640,8 @@ export class StatsService {
 	): Promise<ContributorLanguageStat[]> {
 		// Include author email so we can match by name or email when authorName may be an email
 		const output = await this.execGit(
-			['log', 'HEAD', '--first-parent', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
+			// Include full history reachable from HEAD (include merges)
+			['log', 'HEAD', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
 			rootPath
 		);
 
@@ -704,7 +702,7 @@ export class StatsService {
 	): Promise<ContributorFileStat[]> {
 		// Include author email so we can match by name or email when authorName may be an email
 		const output = await this.execGit(
-			['log', 'HEAD', '--first-parent', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
+			['log', 'HEAD', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
 			rootPath
 		);
 
