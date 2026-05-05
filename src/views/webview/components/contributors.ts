@@ -82,24 +82,28 @@ export const renderContributorsChart = (
                     });
                 }
 
-                const toggle = document.getElementById('contributors-toggle');
-                const all = document.getElementById('contributors-all');
-                const list = document.getElementById('contributors-list');
-                if (toggle && all && list) {
-                    toggle.addEventListener('click', () => {
-                        if (all.style.display === 'none') {
-                            list.style.display = 'none';
-                            all.style.display = 'block';
-                            toggle.textContent = 'Show fewer contributors';
-                        } else {
-                            list.style.display = 'block';
-                            all.style.display = 'none';
-                            toggle.textContent = 'Show all contributors';
-                        }
+                // Use delegated click handling and guard for DOM readiness
+                document.addEventListener('click', (ev) => {
+                    const target = ev.target;
+                    if (!(target instanceof HTMLElement)) return;
+                    if (target.id !== 'contributors-toggle') return;
 
-                        window.__codecountRequestLayout?.();
-                    });
-                }
+                    const allEl = document.getElementById('contributors-all');
+                    const listEl = document.getElementById('contributors-list');
+                    if (!allEl || !listEl) return;
+
+                    if (allEl.style.display === 'none' || getComputedStyle(allEl).display === 'none') {
+                        listEl.style.display = 'none';
+                        allEl.style.display = 'block';
+                        target.textContent = 'Show fewer contributors';
+                    } else {
+                        listEl.style.display = 'block';
+                        allEl.style.display = 'none';
+                        target.textContent = 'Show all contributors';
+                    }
+
+                    window.__codecountRequestLayout?.();
+                });
             </script>
         </div>
     `;

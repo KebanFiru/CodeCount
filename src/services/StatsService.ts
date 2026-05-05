@@ -234,14 +234,15 @@ export class StatsService {
 			// Limit log to the current branch (HEAD) and follow first-parent
 			// so repository metrics (total contributors, commits, etc.) are
 			// computed relative to the current branch only.
+			// Include author email in the pretty format so we can aggregate by email
 			const output = await this.execGit(
-				['log', 'HEAD', '--first-parent', '--date=iso-strict', `--pretty=${GIT_COMMIT_PREFIX}%aI|%an`, '--numstat'],
+				['log', 'HEAD', '--first-parent', '--date=iso-strict', `--pretty=${GIT_COMMIT_PREFIX}%aI|%aE|%an`, '--numstat'],
 				rootPath
 			);
 
 			const byDate = new Map<string, { commits: number; added: number; deleted: number }>();
 			const byMonth = new Map<string, { commits: number; added: number; deleted: number }>();
-			const byAuthor = new Map<string, { commits: number; added: number; deleted: number }>();
+			const byAuthor = new Map<string, { name: string; email?: string; commits: number; added: number; deleted: number }>();
 			const byFile = new Map<string, { added: number; deleted: number }>();
 			const commitsByWeekday = Array.from({ length: 7 }, () => 0);
 			const commitsByHour = Array.from({ length: 24 }, () => 0);
@@ -258,7 +259,10 @@ export class StatsService {
 			for (const line of lines) {
 				if (line.startsWith(GIT_COMMIT_PREFIX)) {
 					const payload = line.slice(GIT_COMMIT_PREFIX.length).trim();
-					const [dateTime, authorName] = payload.split('|');
+					const parts = payload.split('|');
+					const dateTime = parts[0];
+					const authorEmail = (parts[1] ?? '').trim();
+					const authorName = (parts[2] ?? '').trim();
 					if (!dateTime) {
 						currentDateKey = undefined;
 						currentMonthKey = undefined;
@@ -268,7 +272,7 @@ export class StatsService {
 
 					const dateKey = dateTime.slice(0, 10);
 					const monthKey = dateTime.slice(0, 7);
-					const author = (authorName ?? '').trim() || 'Unknown';
+					const author = (authorName ?? '').trim() || (authorEmail || 'Unknown');
 					const date = new Date(dateTime);
 					if (Number.isNaN(date.getTime())) {
 						currentDateKey = undefined;
@@ -303,9 +307,12 @@ export class StatsService {
 					monthBucket.commits += 1;
 					byMonth.set(monthKey, monthBucket);
 
-					const authorBucket = byAuthor.get(author) ?? { commits: 0, added: 0, deleted: 0 };
+					const key = authorEmail || author;
+					const authorBucket = byAuthor.get(key) ?? { name: authorName || author, email: authorEmail || undefined, commits: 0, added: 0, deleted: 0 };
 					authorBucket.commits += 1;
-					byAuthor.set(author, authorBucket);
+					byAuthor.set(key, authorBucket);
+					// store the aggregation key so following numstat lines map correctly
+					currentAuthor = key;
 					continue;
 				}
 
@@ -341,7 +348,7 @@ export class StatsService {
 					byMonth.set(currentMonthKey, monthBucket);
 				}
 
-				const authorBucket = byAuthor.get(currentAuthor);
+				const authorBucket = currentAuthor ? byAuthor.get(currentAuthor) : undefined;
 				if (authorBucket) {
 					authorBucket.added += added;
 					authorBucket.deleted += deleted;
@@ -374,12 +381,15 @@ export class StatsService {
 				.sort((a, b) => a.month.localeCompare(b.month));
 
 			const commitsByAuthor = Array.from(byAuthor.entries())
-				.map(([author, value]) => ({
-					author,
-					commits: value.commits,
-					added: value.added,
-					deleted: value.deleted
-				}))
+				.map(([key, value]) => {
+					const display = value.email ? `${value.name} <${value.email}>` : value.name;
+					return {
+						author: display,
+						commits: value.commits,
+						added: value.added,
+						deleted: value.deleted
+					};
+				})
 				.sort((a, b) => b.commits - a.commits);
 
 			const topChangedFiles = Array.from(byFile.entries())
@@ -501,20 +511,26 @@ export class StatsService {
 	}
 
 	private async getContributorStatsFromGit(rootPath: string): Promise<ContributorStat[]> {
+		// Use author email as the aggregation key to avoid duplicate names
 		const output = await this.execGit(
-			['log', 'HEAD', '--first-parent', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an`],
+			['log', 'HEAD', '--first-parent', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
 			rootPath
 		);
 
-		const stats = new Map<string, { added: number; deleted: number }>();
+		const stats = new Map<string, { name: string; added: number; deleted: number }>();
 		const existsCache = new Map<string, boolean>();
-		let currentAuthor = 'Unknown';
+		let currentKey = 'unknown';
+		let currentName = 'Unknown';
 		const lines = output.split(/\r?\n/);
 		for (const line of lines) {
 			if (line.startsWith(GIT_AUTHOR_PREFIX)) {
-				currentAuthor = line.slice(GIT_AUTHOR_PREFIX.length).trim() || 'Unknown';
-				if (!stats.has(currentAuthor)) {
-					stats.set(currentAuthor, { added: 0, deleted: 0 });
+				const payload = line.slice(GIT_AUTHOR_PREFIX.length).trim();
+				const [namePart, emailPart] = payload.split('|');
+				currentName = (namePart ?? 'Unknown').trim() || 'Unknown';
+				const email = (emailPart ?? '').trim();
+				currentKey = email || currentName;
+				if (!stats.has(currentKey)) {
+					stats.set(currentKey, { name: currentName, added: 0, deleted: 0 });
 				}
 				continue;
 			}
@@ -543,14 +559,14 @@ export class StatsService {
 				continue;
 			}
 
-			const current = stats.get(currentAuthor) ?? { added: 0, deleted: 0 };
+			const current = stats.get(currentKey) ?? { name: currentName, added: 0, deleted: 0 };
 			current.added += added;
 			current.deleted += deleted;
-			stats.set(currentAuthor, current);
+			stats.set(currentKey, current);
 		}
 
 		return Array.from(stats.entries())
-			.map(([name, v]) => ({ name, added: v.added, deleted: v.deleted }))
+			.map(([key, v]) => ({ name: v.name, added: v.added, deleted: v.deleted }))
 			// Filter out authors with no recorded changes (added + deleted === 0)
 			.filter(item => (item.added + item.deleted) > 0)
 			.sort((a, b) => (b.added + b.deleted) - (a.added + a.deleted));
@@ -559,19 +575,25 @@ export class StatsService {
 	private async getContributorStatsFromGitAll(rootPath: string): Promise<ContributorStat[]> {
 		// For "all" contributors we want to consider the entire repository
 		// history across all refs/branches. Use --all to include all refs.
+		// Aggregate by email to avoid duplicates across name variations.
 		const output = await this.execGit(
-			['log', '--all', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an`],
+			['log', '--all', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
 			rootPath
 		);
 
-		const stats = new Map<string, { added: number; deleted: number }>();
-		let currentAuthor = 'Unknown';
+		const stats = new Map<string, { name: string; added: number; deleted: number }>();
+		let currentKey = 'unknown';
+		let currentName = 'Unknown';
 		const lines = output.split(/\r?\n/);
 		for (const line of lines) {
 			if (line.startsWith(GIT_AUTHOR_PREFIX)) {
-				currentAuthor = line.slice(GIT_AUTHOR_PREFIX.length).trim() || 'Unknown';
-				if (!stats.has(currentAuthor)) {
-					stats.set(currentAuthor, { added: 0, deleted: 0 });
+				const payload = line.slice(GIT_AUTHOR_PREFIX.length).trim();
+				const [namePart, emailPart] = payload.split('|');
+				currentName = (namePart ?? 'Unknown').trim() || 'Unknown';
+				const email = (emailPart ?? '').trim();
+				currentKey = email || currentName;
+				if (!stats.has(currentKey)) {
+					stats.set(currentKey, { name: currentName, added: 0, deleted: 0 });
 				}
 				continue;
 			}
@@ -593,14 +615,14 @@ export class StatsService {
 				continue;
 			}
 
-			const current = stats.get(currentAuthor) ?? { added: 0, deleted: 0 };
+			const current = stats.get(currentKey) ?? { name: currentName, added: 0, deleted: 0 };
 			current.added += added;
 			current.deleted += deleted;
-			stats.set(currentAuthor, current);
+			stats.set(currentKey, current);
 		}
 
 		return Array.from(stats.entries())
-			.map(([name, v]) => ({ name, added: v.added, deleted: v.deleted }))
+			.map(([key, v]) => ({ name: v.name, added: v.added, deleted: v.deleted }))
 			// Exclude authors with zero total changes when aggregating across all refs
 			.filter(item => (item.added + item.deleted) > 0)
 			.sort((a, b) => (b.added + b.deleted) - (a.added + a.deleted));
