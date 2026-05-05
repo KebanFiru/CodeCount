@@ -1,6 +1,6 @@
 export type LanguageStat = { languageId: string; lines: number };
 export type LanguageFileStat = { filePath: string; absolutePath: string; lines: number };
-export type ContributorStat = { name: string; added: number; deleted: number };
+export type ContributorStat = { name: string; email?: string; added: number; deleted: number };
 export type ContributorLanguageStat = { languageId: string; linesAdded: number };
 export type ContributorFileStat = { filePath: string; added: number; deleted: number };
 export type ContributorFileHistoryEntry = { hash: string; date: string };
@@ -15,6 +15,7 @@ export type LanguageStatsResult = {
 export type ContributorStatsResult = {
 	available: boolean;
 	stats: ContributorStat[];
+	branch?: string;
 };
 
 export type RepoCommitTrendStat = {

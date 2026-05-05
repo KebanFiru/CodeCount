@@ -186,9 +186,10 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 		}
 
 		const totalChanges = effectiveStats.reduce((sum, s) => sum + (s.added + s.deleted), 0);
+		const branchLabel = result.branch && result.branch !== 'all' ? ` (branch: ${result.branch})` : '';
 		const totalNode = new StatsNode(
 			'info',
-			`Total contributors: ${effectiveStats.length}`,
+			`Total contributors${branchLabel}: ${effectiveStats.length}`,
 			vscode.TreeItemCollapsibleState.None
 		);
 		totalNode.description = `${totalChanges.toLocaleString()} total changes`;
@@ -197,9 +198,10 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			const entryTotal = entry.added + entry.deleted;
 			const percent = totalChanges > 0 ? Math.round((entryTotal / totalChanges) * 100) : 0;
 			const description = `${entryTotal.toLocaleString()} changes (${percent}%)`;
-			const node = new StatsNode('contributor', entry.name, vscode.TreeItemCollapsibleState.Collapsed, entry.name);
+			const displayName = entry.name;
+			const node = new StatsNode('contributor', displayName, vscode.TreeItemCollapsibleState.Collapsed, entry.email ?? entry.name);
 			node.description = description;
-			node.tooltip = `+${entry.added.toLocaleString()} -${entry.deleted.toLocaleString()} by ${entry.name}\nWorkspace changes`;
+			node.tooltip = `+${entry.added.toLocaleString()} -${entry.deleted.toLocaleString()} by ${displayName}\nWorkspace changes`;
 			return node;
 		})];
 	}
@@ -231,7 +233,8 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			const entryTotal = entry.added + entry.deleted;
 			const percent = totalChanges > 0 ? Math.round((entryTotal / totalChanges) * 100) : 0;
 			const description = `${entryTotal.toLocaleString()} changes (${percent}%)`;
-			const node = new StatsNode('contributorAll', entry.name, vscode.TreeItemCollapsibleState.None);
+			const displayName = entry.name;
+			const node = new StatsNode('contributorAll', displayName, vscode.TreeItemCollapsibleState.None, entry.email ?? entry.name);
 			node.description = description;
 			node.tooltip = `+${entry.added.toLocaleString()} -${entry.deleted.toLocaleString()} in repository`;
 			return node;

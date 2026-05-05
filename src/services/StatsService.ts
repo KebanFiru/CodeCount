@@ -122,7 +122,14 @@ export class StatsService {
 			return { available: true, stats: [] };
 		}
 
-		return { available: true, stats };
+		let branch: string | undefined;
+		try {
+			branch = (await this.execGit(['rev-parse', '--abbrev-ref', 'HEAD'], rootPath)).trim();
+		} catch {
+			branch = undefined;
+		}
+
+		return { available: true, stats, branch };
 	}
 
 	async getContributorStatsAll(): Promise<ContributorStatsResult> {
@@ -138,7 +145,9 @@ export class StatsService {
 			return { available: true, stats: [] };
 		}
 
-		return { available: true, stats };
+
+		// mark as 'all' to indicate repo-wide data
+		return { available: true, stats, branch: 'all' };
 	}
 
 	async getContributorLanguageStats(authorName: string): Promise<{ available: boolean; stats: ContributorLanguageStat[] }> {
@@ -566,7 +575,7 @@ export class StatsService {
 		}
 
 		return Array.from(stats.entries())
-			.map(([key, v]) => ({ name: v.name, added: v.added, deleted: v.deleted }))
+			.map(([key, v]) => ({ name: v.name, email: key && key.includes('@') ? key : undefined, added: v.added, deleted: v.deleted }))
 			// Filter out authors with no recorded changes (added + deleted === 0)
 			.filter(item => (item.added + item.deleted) > 0)
 			.sort((a, b) => (b.added + b.deleted) - (a.added + a.deleted));
@@ -622,7 +631,7 @@ export class StatsService {
 		}
 
 		return Array.from(stats.entries())
-			.map(([key, v]) => ({ name: v.name, added: v.added, deleted: v.deleted }))
+			.map(([key, v]) => ({ name: v.name, email: key && key.includes('@') ? key : undefined, added: v.added, deleted: v.deleted }))
 			// Exclude authors with zero total changes when aggregating across all refs
 			.filter(item => (item.added + item.deleted) > 0)
 			.sort((a, b) => (b.added + b.deleted) - (a.added + a.deleted));
@@ -632,19 +641,24 @@ export class StatsService {
 		rootPath: string,
 		authorName: string
 	): Promise<ContributorLanguageStat[]> {
+		// Include author email so we can match by name or email when authorName may be an email
 		const output = await this.execGit(
-			['log', 'HEAD', '--first-parent', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an`],
+			['log', 'HEAD', '--first-parent', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
 			rootPath
 		);
 
 		const languageTotals = new Map<string, number>();
 		const languageByPath = new Map<string, string>();
 		const existsCache = new Map<string, boolean>();
-		let currentAuthor = 'Unknown';
+		let currentAuthorName = 'Unknown';
+		let currentAuthorEmail = '';
 		const lines = output.split(/\r?\n/);
 		for (const line of lines) {
 			if (line.startsWith(GIT_AUTHOR_PREFIX)) {
-				currentAuthor = line.slice(GIT_AUTHOR_PREFIX.length).trim() || 'Unknown';
+				const payload = line.slice(GIT_AUTHOR_PREFIX.length).trim();
+				const [namePart, emailPart] = payload.split('|');
+				currentAuthorName = (namePart ?? 'Unknown').trim() || 'Unknown';
+				currentAuthorEmail = (emailPart ?? '').trim();
 				continue;
 			}
 
@@ -652,8 +666,11 @@ export class StatsService {
 				continue;
 			}
 
-			if (currentAuthor !== authorName) {
-				continue;
+			// Match either by provided name or email
+			if (authorName.includes('@')) {
+				if (currentAuthorEmail !== authorName) continue;
+			} else {
+				if (currentAuthorName !== authorName) continue;
 			}
 
 			const [addedText, , filePath] = line.split('\t');
@@ -685,19 +702,24 @@ export class StatsService {
 		authorName: string,
 		languageId: string
 	): Promise<ContributorFileStat[]> {
+		// Include author email so we can match by name or email when authorName may be an email
 		const output = await this.execGit(
-			['log', 'HEAD', '--first-parent', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an`],
+			['log', 'HEAD', '--first-parent', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
 			rootPath
 		);
 
 		const fileTotals = new Map<string, { added: number; deleted: number }>();
 		const languageByPath = new Map<string, string>();
 		const existsCache = new Map<string, boolean>();
-		let currentAuthor = 'Unknown';
+		let currentAuthorName = 'Unknown';
+		let currentAuthorEmail = '';
 		const lines = output.split(/\r?\n/);
 		for (const line of lines) {
 			if (line.startsWith(GIT_AUTHOR_PREFIX)) {
-				currentAuthor = line.slice(GIT_AUTHOR_PREFIX.length).trim() || 'Unknown';
+				const payload = line.slice(GIT_AUTHOR_PREFIX.length).trim();
+				const [namePart, emailPart] = payload.split('|');
+				currentAuthorName = (namePart ?? 'Unknown').trim() || 'Unknown';
+				currentAuthorEmail = (emailPart ?? '').trim();
 				continue;
 			}
 
@@ -705,8 +727,11 @@ export class StatsService {
 				continue;
 			}
 
-			if (currentAuthor !== authorName) {
-				continue;
+			// Match either by provided name or email
+			if (authorName.includes('@')) {
+				if (currentAuthorEmail !== authorName) continue;
+			} else {
+				if (currentAuthorName !== authorName) continue;
 			}
 
 			const [addedText, deletedText, filePath] = line.split('\t');

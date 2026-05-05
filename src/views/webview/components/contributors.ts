@@ -2,7 +2,7 @@ import type { ContributorStat } from '../../../types';
 import { escapeHtml, generateColors } from '../utils';
 
 export const renderContributorsChart = (
-    result: { available: boolean; stats: ContributorStat[] }
+    result: { available: boolean; stats: ContributorStat[]; branch?: string }
 ): string => {
     if (!result.available || result.stats.length === 0) {
         return `
@@ -20,11 +20,12 @@ export const renderContributorsChart = (
 
     const previewRows = topPreview.map((stat, idx) => {
         const total = stat.added + stat.deleted;
+        const displayName = escapeHtml(stat.name);
         const percent = Math.max(1, Math.round((total / maxChanges) * 100));
         return `
             <div class="row">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
-                    <strong>${escapeHtml(stat.name)}</strong>
+                    <strong>${displayName}</strong>
                     <span style="color: ${colors[idx]}; font-weight:600; font-size:14px;">+${stat.added.toLocaleString()} -${stat.deleted.toLocaleString()}</span>
                 </div>
                 <div class="bar"><span style="width:${percent}%; background-color: ${colors[idx]}"></span></div>
@@ -35,10 +36,11 @@ export const renderContributorsChart = (
 
     const allRows = result.stats.map((stat, idx) => {
         const total = stat.added + stat.deleted;
+        const displayName = escapeHtml(stat.name);
         return `
             <div class="row">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
-                    <strong>${escapeHtml(stat.name)}</strong>
+                    <strong>${displayName}</strong>
                     <span style="color: ${colors[idx]}; font-weight:600; font-size:13px;">+${stat.added.toLocaleString()} -${stat.deleted.toLocaleString()}</span>
                 </div>
                 <div class="muted">${total.toLocaleString()} total changes</div>
@@ -49,9 +51,12 @@ export const renderContributorsChart = (
     const barLabels = result.stats.slice(0, 10).map(s => escapeHtml(s.name));
     const barData = result.stats.slice(0, 10).map(s => s.added + s.deleted);
 
+    const branchLabel = result.branch && result.branch !== 'all' ? `<div class="muted" style="font-size:12px;margin-top:4px;">Branch: ${escapeHtml(result.branch)}</div>` : '';
+
     return `
         <div class="card">
             <h2>Contributors</h2>
+            ${branchLabel}
             <div class="section-grid">
                 <div>
                     <div id="contributors-list">
