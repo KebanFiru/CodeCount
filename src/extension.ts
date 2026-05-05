@@ -6,6 +6,7 @@ import { WorkspaceLineCounter } from './services/WorkspaceLineCounter';
 import { LineCounterByFileFormat } from './services/LineCounterByFileFormat';
 import { StatsTreeProvider } from './views/StatsTreeProvider';
 import { StatsService } from './services/StatsService';
+import { StatsWebviewPanel } from './views/StatsWebviewPanel';
 
 export function activate(context: vscode.ExtensionContext) {
 	const lineCounter = new LineCounter();
@@ -14,6 +15,45 @@ export function activate(context: vscode.ExtensionContext) {
 	const lineCounterByFileFormat = new LineCounterByFileFormat(workspaceLineCounter);
 	const statsService = new StatsService(lineCounter, gitignoreService);
 	const statsProvider = new StatsTreeProvider(statsService);
+
+	let branchRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+	const scheduleBranchRefresh = () => {
+		if (branchRefreshTimer) {
+			clearTimeout(branchRefreshTimer);
+		}
+		branchRefreshTimer = setTimeout(() => {
+			gitignoreService.clearCache();
+			statsProvider.refresh();
+			StatsWebviewPanel.refreshIfOpen();
+			branchRefreshTimer = undefined;
+		}, 150);
+	};
+
+	void (async () => {
+		const gitDirPath = await statsService.getGitDirPath();
+		if (!gitDirPath) {
+			return;
+		}
+
+		const gitRoot = await statsService.getGitRootPath();
+		if (!gitRoot) {
+			return;
+		}
+
+		const watchers = [
+			vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(gitRoot, '.git/HEAD')),
+			vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(gitRoot, '.git/refs/heads/**')),
+			vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(gitRoot, '.git/packed-refs')),
+			vscode.workspace.createFileSystemWatcher('**/.gitignore')
+		];
+
+		for (const watcher of watchers) {
+			watcher.onDidChange(scheduleBranchRefresh, undefined, context.subscriptions);
+			watcher.onDidCreate(scheduleBranchRefresh, undefined, context.subscriptions);
+			watcher.onDidDelete(scheduleBranchRefresh, undefined, context.subscriptions);
+			context.subscriptions.push(watcher);
+		}
+	})();
 
 	const fileline = vscode.commands.registerCommand('codecount.countLines', () => {
 		const editor = vscode.window.activeTextEditor;
@@ -73,6 +113,11 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const refreshStats = vscode.commands.registerCommand('codecount.refreshStats', () => {
 		statsProvider.refresh();
+		StatsWebviewPanel.refreshIfOpen();
+	});
+
+	const openAnalytics = vscode.commands.registerCommand('codecount.openAnalytics', () => {
+		StatsWebviewPanel.createOrShow(context.extensionUri, statsService);
 	});
 
 	const gitRepoMissing = vscode.commands.registerCommand('codecount.gitRepoMissing', () => {
@@ -149,6 +194,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(fileslines);
 	context.subscriptions.push(fileslinesByExtension);
 	context.subscriptions.push(refreshStats);
+	context.subscriptions.push(openAnalytics);
 	context.subscriptions.push(gitRepoMissing);
 	context.subscriptions.push(openContributorFile);
 	context.subscriptions.push(

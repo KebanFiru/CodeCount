@@ -2,8 +2,17 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { GitignoreMatcher, GitignoreRule } from '../types/gitignore';
 
+type GitignoreScope = {
+	rootRelativeDir: string;
+	rules: GitignoreRule[];
+};
+
 export class GitignoreService {
 	private readonly cache = new Map<string, GitignoreMatcher>();
+
+	clearCache(): void {
+		this.cache.clear();
+	}
 
 	async getMatcher(rootPath: string): Promise<GitignoreMatcher> {
 		const cached = this.cache.get(rootPath);
@@ -17,20 +26,43 @@ export class GitignoreService {
 	}
 
 	private async loadGitignore(rootPath: string): Promise<GitignoreMatcher> {
-		const gitignoreUri = vscode.Uri.file(path.join(rootPath, '.gitignore'));
-		let content = '';
-		try {
-			const data = await vscode.workspace.fs.readFile(gitignoreUri);
-			content = data.toString();
-		} 
-		catch {
-			// .gitignore not found 
+		const scopes = await this.loadGitignoreScopes(rootPath);
+		return {
+			ignores: (relativePath: string) => this.matchGitignore(scopes, relativePath)
+		};
+	}
+
+	private async loadGitignoreScopes(rootPath: string): Promise<GitignoreScope[]> {
+		const gitignoreFiles = await vscode.workspace.findFiles(
+			'**/.gitignore',
+			'**/{node_modules,out,dist,.git}/**'
+		);
+
+		const scopes: GitignoreScope[] = [];
+		for (const uri of gitignoreFiles) {
+			const relativePath = path.relative(rootPath, uri.fsPath);
+			if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+				continue;
+			}
+
+			const relativeGitignorePath = relativePath.replace(/\\/g, '/');
+			const rootRelativeDir = path.dirname(relativeGitignorePath).replace(/\\/g, '/');
+			const content = await this.readGitignoreFile(uri);
+			const rules = this.parseGitignore(content);
+			scopes.push({ rootRelativeDir, rules });
 		}
 
-		const rules = this.parseGitignore(content);
-		return {
-			ignores: (relativePath: string) => this.matchGitignore(rules, relativePath)
-		};
+		scopes.sort((a, b) => a.rootRelativeDir.length - b.rootRelativeDir.length);
+		return scopes;
+	}
+
+	private async readGitignoreFile(uri: vscode.Uri): Promise<string> {
+		try {
+			const data = await vscode.workspace.fs.readFile(uri);
+			return Buffer.from(data).toString('utf8').replace(/^\uFEFF/, '');
+		} catch {
+			return '';
+		}
 	}
 
 	private parseGitignore(content: string): GitignoreRule[] {
@@ -71,21 +103,45 @@ export class GitignoreService {
 		return rules;
 	}
 
-	private matchGitignore(rules: GitignoreRule[], relativePath: string): boolean {
+	private matchGitignore(scopes: GitignoreScope[], relativePath: string): boolean {
 
 		const normalized = relativePath.replace(/\\/g, '/');
 		let ignored = false;
+		const pathSegments = normalized.split('/');
 
-		for (const rule of rules) {
-			const matches = rule.isDirectory
-				? rule.regex.test(normalized + '/')
-				: rule.regex.test(normalized);
-			if (matches) {
-				ignored = !rule.negate;
+		for (const scope of scopes) {
+			if (!this.scopeApplies(scope.rootRelativeDir, pathSegments)) {
+				continue;
+			}
+
+			const scopedRelativePath = scope.rootRelativeDir === '.'
+				? normalized
+				: normalized.slice(scope.rootRelativeDir.length + 1);
+
+			for (const rule of scope.rules) {
+				const matches = rule.isDirectory
+					? rule.regex.test(scopedRelativePath + '/')
+					: rule.regex.test(scopedRelativePath);
+				if (matches) {
+					ignored = !rule.negate;
+				}
 			}
 		}
 
 		return ignored;
+	}
+
+	private scopeApplies(rootRelativeDir: string, pathSegments: string[]): boolean {
+		if (rootRelativeDir === '.' || rootRelativeDir.length === 0) {
+			return true;
+		}
+
+		const scopeSegments = rootRelativeDir.split('/').filter(Boolean);
+		if (scopeSegments.length === 0 || scopeSegments.length > pathSegments.length) {
+			return false;
+		}
+
+		return scopeSegments.every((segment, index) => pathSegments[index] === segment);
 	}
 
 	private gitignorePatternToRegex(pattern: string): RegExp {
