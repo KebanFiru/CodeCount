@@ -39,14 +39,6 @@
 - **Dark Mode Support** - Optimized for all VS Code themes with white text contrast
 - **Performance Optimized** - Instant analysis even for large projects
 
-##  Recent Improvements (v2.0.0)
-
--  **Branch-aware statistics** - Contributors and languages now adapt to current branch context
--  **Enhanced chart interactivity** - Improved hover states and tooltip visibility
--  **Better data visualization** - Horizontal bar charts for cleaner contributor display
--  **Refined UI/UX** - Simplified panels, better contrast, improved readability
--  **Bug fixes** - Fixed chart rendering, toggle functionality, and text color consistency
-
 ##  Commands
 
 Access CodeCount commands via the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
