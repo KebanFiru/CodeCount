@@ -7,7 +7,6 @@ import {
 	renderLanguageCharts,
 	renderLanguageTable,
 	renderContributorsChart,
-	renderIgnoredFilesSection,
 	renderRepoAnalytics
 } from './webview/templates';
 
@@ -106,8 +105,6 @@ export class StatsWebviewPanel {
 			${renderContributorsChart(contributorResult)}
 			${renderRepoAnalytics(repoAnalytics)}
 		</div>
-
-		${renderIgnoredFilesSection(languageResult)}
 	</div>
 
 	<script>

@@ -1,10 +1,7 @@
 # CodeCount - VS Code Extension
 
 <!-- Badges -->
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![VS Code](https://img.shields.io/badge/VS%20Code-1.108.2+-blue)](https://code.visualstudio.com/)
 [![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/KebanFiru.CodeLineCounter?label=VS%20Marketplace&color=0078d7)](https://marketplace.visualstudio.com/items?itemName=KebanFiru.CodeLineCounter)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-blue)](https://www.typescriptlang.org/)
 
 > Quickly analyze your project's codebase with comprehensive metrics, Git analytics, and interactive dashboards.
 
@@ -17,23 +14,38 @@
 ###  Code Metrics
 - **Workspace Analysis** - Total line counts for entire projects
 - **File-by-File Breakdown** - Statistics for individual files
-- **Language Distribution** - Analyze code across file types with expandable lists
+- **Branch-Aware Language Distribution** - Analyze code by file type with branch-specific stats on feature branches
 - **Comment Detection** - Separate counts for comment and blank lines
 - **Gitignore Support** - Automatically respects `.gitignore` patterns
 
 ###  Git Analytics (Repository View)
-- **Contributor Statistics** - Track contributions with added/deleted line counts
+- **Branch-Aware Contributor Statistics** - Track contributions with smart branch detection:
+  - Feature branches show all branch contributors
+  - Main branch shows complete repository history
 - **Commit Trends** - Visualize commits, additions, and deletions over time
 - **Monthly Activity** - Monitor development activity by month
 - **Work Patterns** - Understand coding patterns by weekday and hour
 - **Repository Metrics** - Total contributors, commits, and lines changed
 
 ###  Interactive Dashboard
-- **Real-Time Statistics Panel** - View metrics in VS Code sidebar
-- **Expandable Lists** - Top 3 preview with "Show all" toggle for contributors and languages
-- **Responsive Charts** - Full-width visualizations using Chart.js v4.4.0
-- **Dark Mode Support** - Optimized for VS Code themes with white text on dark backgrounds
+- **Real-Time Statistics Panel** - View metrics in VS Code sidebar with instant updates
+- **Expandable Lists** - Top 3 preview with "Show all/Show less" toggle for:
+  - Contributors by lines changed
+  - Languages by line count
+- **Interactive Charts** - Fully responsive visualizations using Chart.js v4.4.0:
+  - Hover support with cursor feedback
+  - Tooltips with detailed information
+  - Horizontal bar charts for better readability
+- **Dark Mode Support** - Optimized for all VS Code themes with white text contrast
 - **Performance Optimized** - Instant analysis even for large projects
+
+##  Recent Improvements (v2.0.0)
+
+-  **Branch-aware statistics** - Contributors and languages now adapt to current branch context
+-  **Enhanced chart interactivity** - Improved hover states and tooltip visibility
+-  **Better data visualization** - Horizontal bar charts for cleaner contributor display
+-  **Refined UI/UX** - Simplified panels, better contrast, improved readability
+-  **Bug fixes** - Fixed chart rendering, toggle functionality, and text color consistency
 
 ##  Commands
 
@@ -67,10 +79,13 @@ Access CodeCount commands via the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P
 - Select the command you want to run
 
 #### Dashboard Features
-- **Expandable Lists** - Click "Show all" to expand contributors or languages
-- **Interactive Charts** - Hover over visualizations for detailed information
-- **Full-Width Analytics** - View commit trends, monthly activity, and work patterns
-- **Real-Time Updates** - Click refresh to update statistics
+- **Branch Context Awareness** - Statistics adapt based on your current branch:
+  - On feature branches: Shows contributors and languages specific to that branch
+  - On main/master: Displays full repository history
+- **Expandable Lists** - Click "Show all" / "Show less" to toggle between preview and full views
+- **Interactive Charts** - Hover over any visualization for detailed tooltips and data points
+- **Full-Width Analytics** - View commit trends, monthly activity, and work patterns across the repository
+- **Real-Time Updates** - Click refresh button to update statistics when branch or files change
 
 ##  Architecture
 
@@ -83,11 +98,24 @@ Access CodeCount commands via the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P
 
 ##  Configuration
 
+### Git Integration
 CodeCount respects your project's `.gitignore` file, automatically excluding:
 - `node_modules/`
 - `dist/` and `build/`
 - `.git/` directories
 - And any patterns defined in `.gitignore`
+
+### Branch-Aware Analytics
+
+**Feature Branches:** When you're on a feature branch (not main/master), CodeCount intelligently shows:
+- Contributors who have commits on your branch
+- Languages and files modified in your branch
+- Branch-specific statistics
+
+**Main Branch:** When on main or master, you see:
+- Complete repository history with all contributors
+- Cumulative language distribution across entire project
+- Full commit history and analytics
 
 ##  License
 
