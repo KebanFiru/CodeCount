@@ -40,10 +40,14 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
+		// Use the actual git directory when available (handles worktrees and repositories
+		// where .git is a file pointing elsewhere). Watch the git dir directly so
+		// branch/head changes are reliably observed.
+		const gitDirBase = gitDirPath;
 		const watchers = [
-			vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(gitRoot, '.git/HEAD')),
-			vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(gitRoot, '.git/refs/heads/**')),
-			vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(gitRoot, '.git/packed-refs')),
+			vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(gitDirBase, 'HEAD')),
+			vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(gitDirBase, 'refs/heads/**')),
+			vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(gitDirBase, 'packed-refs')),
 			vscode.workspace.createFileSystemWatcher('**/.gitignore')
 		];
 
