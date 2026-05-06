@@ -2,11 +2,14 @@ export const chartStyles = `
 	/* Chart Container */
 	.chart-container {
 		position: relative;
+		/* Let the container size with content but provide a sensible max to avoid
+		   being clipped inside the webview on macOS where the webview may be
+		   constrained by the editor area. */
 		height: auto;
+		max-height: 680px;
 		margin-bottom: 10px;
 		min-width: 0;
 		flex: 0 0 auto;
-		max-height: none;
 		width: 100%;
 		display: block;
 	}
@@ -19,6 +22,7 @@ export const chartStyles = `
 	}
 	
 	.chart-container.compact {
-		height: 200px;
+		height: 220px;
+		max-height: 320px;
 	}
 `;

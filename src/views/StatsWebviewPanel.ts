@@ -116,7 +116,9 @@ export class StatsWebviewPanel {
 			const rowHeight = parseInt(style.getPropertyValue('grid-auto-rows')) || 8;
 			const rowGap = parseInt(style.rowGap) || parseInt(style.getPropertyValue('gap')) || 12;
 			Array.from(grid.children).forEach((item) => {
-				const h = Math.ceil((item.getBoundingClientRect().height + rowGap) / (rowHeight + rowGap));
+				const itemHeight = item.getBoundingClientRect().height;
+				// Add a small buffer to the calculated span to avoid off-by-one clipping
+				const h = Math.ceil((itemHeight + rowGap) / (rowHeight + rowGap)) + 1;
 				item.style.gridRowEnd = 'span ' + Math.max(1, h);
 			});
 		}

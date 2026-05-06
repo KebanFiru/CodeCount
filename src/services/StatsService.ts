@@ -165,7 +165,29 @@ export class StatsService {
 
 		let stats: ContributorStat[] = [];
 		try {
-			stats = await this.getContributorStatsFromGit(rootPath);
+			// Detect if on feature branch and get branch-specific contributors
+			let mergeBase: string | undefined;
+			try {
+				const currentBranch = (await this.execGit(['rev-parse', '--abbrev-ref', 'HEAD'], rootPath)).trim();
+				const isMainBranch = currentBranch === 'main' || currentBranch === 'master' || currentBranch === 'origin/main' || currentBranch === 'origin/master';
+				
+				// For feature branches, get merge base with main
+				if (!isMainBranch) {
+					try {
+						try {
+							mergeBase = (await this.execGit(['merge-base', 'HEAD', 'main'], rootPath)).trim();
+						} catch {
+							mergeBase = (await this.execGit(['merge-base', 'HEAD', 'master'], rootPath)).trim();
+						}
+					} catch {
+						// Fallback to all history if merge base detection fails
+						mergeBase = undefined;
+					}
+				}
+			} catch {
+				// If git operations fail, use all history
+			}
+			stats = await this.getContributorStatsFromGit(rootPath, mergeBase);
 		} catch {
 			return { available: true, stats: [] };
 		}
@@ -567,12 +589,12 @@ export class StatsService {
 		}
 	}
 
-	private async getContributorStatsFromGit(rootPath: string): Promise<ContributorStat[]> {
+	private async getContributorStatsFromGit(rootPath: string, mergeBase?: string): Promise<ContributorStat[]> {
 		// Use author email as the aggregation key to avoid duplicate names
-		// Always show the full branch history (main/feature/etc.)
+		// For feature branches, only show contributors to that specific branch
+		const logArgs = mergeBase ? [`${mergeBase}..HEAD`, '--numstat'] : ['HEAD', '--numstat'];
 		const output = await this.execGit(
-			// Include full history reachable from HEAD (include merges)
-			['log', 'HEAD', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
+			['log', ...logArgs, `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
 			rootPath
 		);
 
