@@ -111,7 +111,24 @@ export const renderRepoAnalytics = (result: RepoAnalyticsResult): string => {
                     new Chart(repoMonthCtx, {
                         type: 'bar',
                         data: { labels: ${JSON.stringify(monthLabels)}, datasets: [ { label: 'Commits', data: ${JSON.stringify(monthCommitData)}, backgroundColor: 'rgba(64,152,255,0.4)', yAxisID: 'y' }, { label: 'Lines Changed', data: ${JSON.stringify(monthChangeData)}, backgroundColor: 'rgba(16,152,173,0.35)', yAxisID: 'y1' } ] },
-                        options: { responsive: true, maintainAspectRatio: true, interaction: { mode: 'index', intersect: false }, layout: { padding: { left: 8, right: 12, top: 8, bottom: 8 } }, plugins: { legend: { labels: { color: ${JSON.stringify(axisColor)} } } }, scales: { x: { ticks: { color: ${JSON.stringify(axisColor)}, maxRotation: 45, minRotation: 45 }, grid: { color: ${JSON.stringify(gridColor)} } }, y: { type: 'linear', position: 'left', ticks: { color: ${JSON.stringify(axisColor)} }, beginAtZero: true, grid: { color: ${JSON.stringify(gridColor)} } }, y1: { type: 'linear', position: 'right', ticks: { color: ${JSON.stringify(axisColor)} }, grid: { drawOnChartArea: false } } } }
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            interaction: { mode: 'index', intersect: false },
+                            layout: { padding: { left: 8, right: 12, top: 8, bottom: 8 } },
+                            plugins: {
+                                legend: { labels: { color: ${JSON.stringify(axisColor)} } },
+                                tooltip: { enabled: true }
+                            },
+                            onHover: (_, activeElements, chart) => {
+                                chart.canvas.style.cursor = activeElements.length > 0 ? 'pointer' : 'default';
+                            },
+                            scales: {
+                                x: { ticks: { color: ${JSON.stringify(axisColor)}, maxRotation: 45, minRotation: 45 }, grid: { color: ${JSON.stringify(gridColor)} } },
+                                y: { type: 'linear', position: 'left', ticks: { color: ${JSON.stringify(axisColor)} }, beginAtZero: true, grid: { color: ${JSON.stringify(gridColor)} } },
+                                y1: { type: 'linear', position: 'right', ticks: { color: ${JSON.stringify(axisColor)} }, grid: { drawOnChartArea: false } }
+                            }
+                        }
                     });
                 }
             </script>
@@ -134,12 +151,44 @@ export const renderRepoAnalytics = (result: RepoAnalyticsResult): string => {
             <script>
                 const repoWeekdayCtx = document.getElementById('repoWeekdayChart');
                 if (repoWeekdayCtx) {
-                    new Chart(repoWeekdayCtx, { type: 'bar', data: { labels: ${JSON.stringify(weekdayLabels)}, datasets: [{ label: 'Commits by Weekday', data: ${JSON.stringify(result.commitsByWeekday)}, backgroundColor: '#4c6ef5' }] }, options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: ${JSON.stringify(axisColor)} }, grid: { color: ${JSON.stringify(gridColor)} } }, y: { ticks: { color: ${JSON.stringify(axisColor)} }, beginAtZero: true, grid: { color: ${JSON.stringify(gridColor)} } } } } });
+                    new Chart(repoWeekdayCtx, {
+                        type: 'bar',
+                        data: { labels: ${JSON.stringify(weekdayLabels)}, datasets: [{ label: 'Commits by Weekday', data: ${JSON.stringify(result.commitsByWeekday)}, backgroundColor: '#4c6ef5' }] },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                            onHover: (_, activeElements, chart) => {
+                                chart.canvas.style.cursor = activeElements.length > 0 ? 'pointer' : 'default';
+                            },
+                            scales: {
+                                x: { ticks: { color: ${JSON.stringify(axisColor)} }, grid: { color: ${JSON.stringify(gridColor)} } },
+                                y: { ticks: { color: ${JSON.stringify(axisColor)} }, beginAtZero: true, grid: { color: ${JSON.stringify(gridColor)} } }
+                            }
+                        }
+                    });
                 }
 
                 const repoHourCtx = document.getElementById('repoHourChart');
                 if (repoHourCtx) {
-                    new Chart(repoHourCtx, { type: 'line', data: { labels: ${JSON.stringify(hourLabels)}, datasets: [{ label: 'Commits by Hour', data: ${JSON.stringify(result.commitsByHour)}, borderColor: '#1098ad', backgroundColor: 'rgba(16,152,173,0.2)', tension: 0.3, fill: true }] }, options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: ${JSON.stringify(axisColor)}, maxTicksLimit: 12 }, grid: { color: ${JSON.stringify(gridColor)} } }, y: { ticks: { color: ${JSON.stringify(axisColor)} }, beginAtZero: true, grid: { color: ${JSON.stringify(gridColor)} } } } } });
+                    new Chart(repoHourCtx, {
+                        type: 'line',
+                        data: { labels: ${JSON.stringify(hourLabels)}, datasets: [{ label: 'Commits by Hour', data: ${JSON.stringify(result.commitsByHour)}, borderColor: '#1098ad', backgroundColor: 'rgba(16,152,173,0.2)', tension: 0.3, fill: true }] },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                            onHover: (_, activeElements, chart) => {
+                                chart.canvas.style.cursor = activeElements.length > 0 ? 'pointer' : 'default';
+                            },
+                            scales: {
+                                x: { ticks: { color: ${JSON.stringify(axisColor)}, maxTicksLimit: 12 }, grid: { color: ${JSON.stringify(gridColor)} } },
+                                y: { ticks: { color: ${JSON.stringify(axisColor)} }, beginAtZero: true, grid: { color: ${JSON.stringify(gridColor)} } }
+                            }
+                        }
+                    });
                 }
             </script>
         </div>

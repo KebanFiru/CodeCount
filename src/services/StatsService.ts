@@ -29,6 +29,44 @@ export class StatsService {
 			return { hasWorkspace: false, totalFiles: 0, filteredFiles: 0, stats: [] };
 		}
 
+		// Detect if on feature branch and get branch-specific file list
+		let branchFiles: Set<string> | undefined;
+		const rootPath = await this.getGitRoot();
+		if (rootPath) {
+			try {
+				const currentBranch = (await this.execGit(['rev-parse', '--abbrev-ref', 'HEAD'], rootPath)).trim();
+				const isMainBranch = currentBranch === 'main' || currentBranch === 'master' || currentBranch === 'origin/main' || currentBranch === 'origin/master';
+				
+				// For feature branches, get files changed since merge base with main
+				if (!isMainBranch) {
+					try {
+						// Find the merge base and get files changed since then
+						let mergeBase = '';
+						try {
+							mergeBase = (await this.execGit(['merge-base', 'HEAD', 'main'], rootPath)).trim();
+						} catch {
+							mergeBase = (await this.execGit(['merge-base', 'HEAD', 'master'], rootPath)).trim();
+						}
+						
+						if (mergeBase) {
+							const filesOutput = await this.execGit(['log', `${mergeBase}..HEAD`, '--name-only', '--pretty='], rootPath);
+							branchFiles = new Set(
+								filesOutput
+									.split(/\r?\n/)
+									.map(line => line.trim())
+									.filter(line => line.length > 0)
+							);
+						}
+					} catch {
+						// Fallback to all files if branch diff fails
+						branchFiles = undefined;
+					}
+				}
+			} catch {
+				// If git operations fail, use all files
+			}
+		}
+
 		const files = await vscode.workspace.findFiles(
 			'**/*',
 			'**/{node_modules,out,dist,.git}/**'
@@ -42,8 +80,18 @@ export class StatsService {
 			return { hasWorkspace: true, totalFiles: files.length, filteredFiles: 0, stats: [] };
 		}
 
+		// Filter to branch-specific files if on feature branch
+		let filesToCount = filtered;
+		if (branchFiles && branchFiles.size > 0) {
+			const workspaceRoot = vscode.workspace.workspaceFolders![0].uri.fsPath;
+			filesToCount = filtered.filter(uri => {
+				const relativePath = path.relative(workspaceRoot, uri.fsPath).replace(/\\/g, '/');
+				return branchFiles.has(relativePath);
+			});
+		}
+
 		const stats = new Map<string, number>();
-		for (const uri of filtered) {
+		for (const uri of filesToCount) {
 			try {
 				const document = await vscode.workspace.openTextDocument(uri);
 				const languageId = document.languageId || 'unknown';
@@ -61,7 +109,7 @@ export class StatsService {
 		return {
 			hasWorkspace: true,
 			totalFiles: files.length,
-			filteredFiles: filtered.length,
+			filteredFiles: branchFiles && branchFiles.size > 0 ? filesToCount.length : filtered.length,
 			stats: entries
 		};
 	}
@@ -521,6 +569,7 @@ export class StatsService {
 
 	private async getContributorStatsFromGit(rootPath: string): Promise<ContributorStat[]> {
 		// Use author email as the aggregation key to avoid duplicate names
+		// Always show the full branch history (main/feature/etc.)
 		const output = await this.execGit(
 			// Include full history reachable from HEAD (include merges)
 			['log', 'HEAD', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],

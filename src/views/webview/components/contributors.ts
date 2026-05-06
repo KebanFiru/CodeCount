@@ -50,6 +50,7 @@ export const renderContributorsChart = (
 
     const barLabels = result.stats.slice(0, 10).map(s => escapeHtml(s.name));
     const barData = result.stats.slice(0, 10).map(s => s.added + s.deleted);
+    const axisColor = '#ffffff';
 
     const branchLabel = result.branch && result.branch !== 'all' ? `<div class="muted" style="font-size:12px;margin-top:4px;">Branch: ${escapeHtml(result.branch)}</div>` : '';
 
@@ -70,45 +71,75 @@ export const renderContributorsChart = (
                     </div>` : ''}
                 </div>
                 <div>
-                    <div class="chart-container compact">
-                        <canvas id="contributorsAuthorBar" height="260"></canvas>
+                    <div class="chart-container" style="height:320px;">
+                        <canvas id="contributorsAuthorBar"></canvas>
                     </div>
                 </div>
             </div>
             <script>
+                const contributorsAxisColor = '#ffffff';
+                const contributorsGridColor = 'rgba(255,255,255,0.12)';
                 const labels = ${JSON.stringify(barLabels)};
                 const data = ${JSON.stringify(barData)};
                 const ctx = document.getElementById('contributorsAuthorBar');
                 if (ctx) {
-                    new Chart(ctx, {
-                        type: 'bar',
-                        data: { labels, datasets: [{ label: 'Lines Changed', data, backgroundColor: ${JSON.stringify(colors.slice(0, 10))} }] },
-                        options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: 'var(--fg)' } }, y: { ticks: { color: 'var(--fg)' }, beginAtZero: true } } }
-                    });
+                    try {
+                        new Chart(ctx, {
+                            type: 'bar',
+                            data: { labels, datasets: [{ label: 'Lines Changed', data, backgroundColor: ${JSON.stringify(colors.slice(0, 10))} }] },
+                            options: {
+                                indexAxis: 'y',
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                interaction: { mode: 'nearest', intersect: true },
+                                layout: { padding: { left: 10, right: 10, top: 8, bottom: 8 } },
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        enabled: true,
+                                        titleColor: contributorsAxisColor,
+                                        bodyColor: contributorsAxisColor
+                                    }
+                                },
+                                onHover: (_, activeElements, chart) => {
+                                    chart.canvas.style.cursor = activeElements.length > 0 ? 'pointer' : 'default';
+                                },
+                                scales: {
+                                    x: {
+                                        beginAtZero: true,
+                                        ticks: { color: contributorsAxisColor, font: { size: 11 } },
+                                        grid: { color: contributorsGridColor }
+                                    },
+                                    y: {
+                                        ticks: { color: contributorsAxisColor, font: { size: 11 }, autoSkip: false },
+                                        grid: { display: false }
+                                    }
+                                }
+                            }
+                        });
+                    } catch {
+                        // Keep toggle interaction available even if chart initialization fails.
+                    }
                 }
 
-                // Use delegated click handling and guard for DOM readiness
-                document.addEventListener('click', (ev) => {
-                    const target = ev.target;
-                    if (!(target instanceof HTMLElement)) return;
-                    if (target.id !== 'contributors-toggle') return;
+                const contributorsToggleBtn = document.getElementById('contributors-toggle');
+                const contributorsPreview = document.getElementById('contributors-list');
+                const contributorsAll = document.getElementById('contributors-all');
+                if (contributorsToggleBtn && contributorsPreview && contributorsAll) {
+                    contributorsToggleBtn.addEventListener('click', () => {
+                        if (contributorsAll.style.display === 'none' || getComputedStyle(contributorsAll).display === 'none') {
+                            contributorsPreview.style.display = 'none';
+                            contributorsAll.style.display = 'block';
+                            contributorsToggleBtn.textContent = 'Show less contributors';
+                        } else {
+                            contributorsPreview.style.display = 'block';
+                            contributorsAll.style.display = 'none';
+                            contributorsToggleBtn.textContent = 'Show all contributors';
+                        }
 
-                    const allEl = document.getElementById('contributors-all');
-                    const listEl = document.getElementById('contributors-list');
-                    if (!allEl || !listEl) return;
-
-                    if (allEl.style.display === 'none' || getComputedStyle(allEl).display === 'none') {
-                        listEl.style.display = 'none';
-                        allEl.style.display = 'block';
-                        target.textContent = 'Show fewer contributors';
-                    } else {
-                        listEl.style.display = 'block';
-                        allEl.style.display = 'none';
-                        target.textContent = 'Show all contributors';
-                    }
-
-                    window.__codecountRequestLayout?.();
-                });
+                        window.__codecountRequestLayout?.();
+                    });
+                }
             </script>
         </div>
     `;
