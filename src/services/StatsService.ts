@@ -210,14 +210,99 @@ export class StatsService {
 
 		let stats: ContributorStat[] = [];
 		try {
-			stats = await this.getContributorStatsFromGitAll(rootPath);
+			// Prefer walking the main branch history only (since project start).
+			// Fall back to master if main isn't present, otherwise fall back to --all.
+			let mainRef: string | undefined;
+			try {
+				await this.execGit(['rev-parse', '--verify', 'main'], rootPath);
+				mainRef = 'main';
+			} catch {
+				try {
+					await this.execGit(['rev-parse', '--verify', 'master'], rootPath);
+					mainRef = 'master';
+				} catch {
+					mainRef = undefined;
+				}
+			}
+			if (mainRef) {
+				// Use first-parent to follow the mainline history and avoid counting
+				// changes that only exist on merged feature branches.
+				const output = await this.execGit(
+					['log', mainRef, '--first-parent', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
+					rootPath
+				);
+				stats = this.parseContributorLog(output);
+			} else {
+				// Fallback to previous behavior (all refs)
+				stats = await this.getContributorStatsFromGitAll(rootPath);
+			}
 		} catch {
 			return { available: true, stats: [] };
 		}
 
+		// Indicate which ref was used for aggregation: main/master or 'all'
+		let branchLabel = 'all';
+		try {
+			// if main exists, indicate it; else if master exists, indicate it
+			await this.execGit(['rev-parse', '--verify', 'main'], rootPath);
+			branchLabel = 'main';
+		} catch {
+			try {
+				await this.execGit(['rev-parse', '--verify', 'master'], rootPath);
+				branchLabel = 'master';
+			} catch {
+				branchLabel = 'all';
+			}
+		}
+		return { available: true, stats, branch: branchLabel };
+	}
 
-		// mark as 'all' to indicate repo-wide data
-		return { available: true, stats, branch: 'all' };
+	// Helper to parse contributor log output into ContributorStat[]
+	private parseContributorLog(output: string): ContributorStat[] {
+		const stats = new Map<string, { name: string; added: number; deleted: number }>();
+		let currentKey = 'unknown';
+		let currentName = 'Unknown';
+		const lines = output.split(/\r?\n/);
+		for (const line of lines) {
+			if (line.startsWith(GIT_AUTHOR_PREFIX)) {
+				const payload = line.slice(GIT_AUTHOR_PREFIX.length).trim();
+				const [namePart, emailPart] = payload.split('|');
+				currentName = (namePart ?? 'Unknown').trim() || 'Unknown';
+				const email = (emailPart ?? '').trim();
+				currentKey = email || currentName;
+				if (!stats.has(currentKey)) {
+					stats.set(currentKey, { name: currentName, added: 0, deleted: 0 });
+				}
+				continue;
+			}
+
+			if (!line.trim()) {
+				continue;
+			}
+
+			const parts = line.split('\t');
+			const addedText = parts[0];
+			const deletedText = parts[1];
+			if (!addedText || addedText === '-') {
+				continue;
+			}
+
+			const added = Number(addedText);
+			const deleted = Number(deletedText ?? 0);
+			if (Number.isNaN(added) || Number.isNaN(deleted)) {
+				continue;
+			}
+
+			const current = stats.get(currentKey) ?? { name: currentName, added: 0, deleted: 0 };
+			current.added += added;
+			current.deleted += deleted;
+			stats.set(currentKey, current);
+		}
+
+		return Array.from(stats.entries())
+			.map(([key, v]) => ({ name: v.name, email: key && key.includes('@') ? key : undefined, added: v.added, deleted: v.deleted }))
+			.filter(item => (item.added + item.deleted) > 0)
+			.sort((a, b) => (b.added + b.deleted) - (a.added + a.deleted));
 	}
 
 	async getContributorLanguageStats(authorName: string): Promise<{ available: boolean; stats: ContributorLanguageStat[] }> {
