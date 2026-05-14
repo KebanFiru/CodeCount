@@ -2,7 +2,7 @@
   "name": "CodeLineCounter",
   "displayName": "CodeLineCounter",
   "description": "A tool for learn how much line of code your project contains",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "publisher": "KebanFiru",
   "license": "MIT",
   "homepage": "https://github.com/KebanFiru/CodeCount#readme",
