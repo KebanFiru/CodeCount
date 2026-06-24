@@ -48,6 +48,7 @@ export type RepoMonthStat = {
 
 export type RepoAnalyticsResult = {
 	available: boolean;
+	branch?: string;
 	totalCommits: number;
 	activeDays: number;
 	firstCommitDate?: string;

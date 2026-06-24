@@ -77,12 +77,17 @@ export class StatsService {
 						const mergeBase = await this.resolveMergeBase(rootPath);
 						if (mergeBase) {
 							const filesOutput = await this.execGit(['log', `${mergeBase}..HEAD`, '--name-only', '--pretty='], rootPath);
-							branchFiles = new Set(
+							const fileSet = new Set(
 								filesOutput
 									.split(/\r?\n/)
 									.map(line => line.trim())
 									.filter(line => line.length > 0)
 							);
+							// Only scope to branch files when there are actual new commits;
+							// an empty set would filter out every file.
+							if (fileSet.size > 0) {
+								branchFiles = fileSet;
+							}
 						}
 					} catch {
 						// Fallback to all files if branch diff fails
@@ -199,7 +204,12 @@ export class StatsService {
 				if (!this.isDefaultBranch(currentBranch)) {
 					mergeBase = await this.resolveMergeBase(rootPath);
 					if (mergeBase) {
-						branch = currentBranch;
+						const countStr = (await this.execGit(['rev-list', '--count', `${mergeBase}..HEAD`], rootPath)).trim();
+						if (parseInt(countStr, 10) > 0) {
+							branch = currentBranch;
+						} else {
+							mergeBase = undefined; // no new commits — show full history
+						}
 					}
 				}
 			} catch {
@@ -338,12 +348,28 @@ export class StatsService {
 		}
 
 		try {
-			// Limit log to the current branch (HEAD) and follow first-parent
-			// so repository metrics (total contributors, commits, etc.) are
-			// computed relative to the current branch only.
-			// Include author email in the pretty format so we can aggregate by email
+			let branch: string | undefined;
+			let logRange = 'HEAD';
+			try {
+				const currentBranch = (await this.execGit(['rev-parse', '--abbrev-ref', 'HEAD'], rootPath)).trim();
+				if (!this.isDefaultBranch(currentBranch)) {
+					const mergeBase = await this.resolveMergeBase(rootPath);
+						if (mergeBase) {
+						// Only scope to branch when it has new commits; an empty range
+						// would make every chart show zeros.
+						const countStr = (await this.execGit(['rev-list', '--count', `${mergeBase}..HEAD`], rootPath)).trim();
+						if (parseInt(countStr, 10) > 0) {
+							logRange = `${mergeBase}..HEAD`;
+							branch = currentBranch;
+						}
+					}
+				}
+			} catch {
+				// Branch detection failed — fall back to full HEAD history
+			}
+
 			const output = await this.execGit(
-				['log', 'HEAD', '--first-parent', '--date=iso-strict', `--pretty=${GIT_COMMIT_PREFIX}%aI|%aE|%an`, '--numstat'],
+				['log', logRange, '--first-parent', '--date=iso-strict', `--pretty=${GIT_COMMIT_PREFIX}%aI|%aE|%an`, '--numstat'],
 				rootPath
 			);
 
@@ -540,6 +566,7 @@ export class StatsService {
 
 			return {
 				available: true,
+				branch,
 				totalCommits,
 				activeDays: commitsByDate.length,
 				firstCommitDate,

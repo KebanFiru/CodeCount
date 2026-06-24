@@ -25,9 +25,20 @@ export const renderRepoAnalytics = (result: RepoAnalyticsResult): string => {
     const minDate = result.commitsByDate.length > 0 ? result.commitsByDate[0].date : '';
     const maxDate = result.commitsByDate.length > 0 ? result.commitsByDate[result.commitsByDate.length - 1].date : '';
 
+    const branchBadge = result.branch
+        ? `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;background:rgba(64,152,255,0.15);border:1px solid rgba(64,152,255,0.3);font-size:11px;font-weight:600;color:#4098ff;">
+               <span style="font-size:13px;">⎇</span> ${escapeHtml(result.branch)}
+           </span>`
+        : `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);font-size:11px;color:rgba(255,255,255,0.5);">
+               <span style="font-size:13px;">⎇</span> all branches
+           </span>`;
+
     return `
         <div class="card">
-            <h2>Repository Analytics</h2>
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+                <h2 style="margin:0;">Repository Analytics</h2>
+                ${branchBadge}
+            </div>
             <div class="metric-grid">
                 <div class="metric-card">
                     <div class="metric-title">Total Contributors</div>
