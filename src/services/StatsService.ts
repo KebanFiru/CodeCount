@@ -66,6 +66,7 @@ export class StatsService {
 
 		// Detect if on feature branch and get branch-specific file list
 		let branchFiles: Set<string> | undefined;
+		let activeBranch: string | undefined;
 		const rootPath = await this.getGitRoot();
 		if (rootPath) {
 			try {
@@ -87,6 +88,7 @@ export class StatsService {
 							// an empty set would filter out every file.
 							if (fileSet.size > 0) {
 								branchFiles = fileSet;
+								activeBranch = currentBranch;
 							}
 						}
 					} catch {
@@ -142,7 +144,8 @@ export class StatsService {
 			hasWorkspace: true,
 			totalFiles: files.length,
 			filteredFiles: branchFiles && branchFiles.size > 0 ? filesToCount.length : filtered.length,
-			stats: entries
+			stats: entries,
+			branch: activeBranch
 		};
 	}
 

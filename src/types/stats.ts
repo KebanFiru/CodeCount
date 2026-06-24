@@ -10,6 +10,7 @@ export type LanguageStatsResult = {
 	totalFiles: number;
 	filteredFiles: number;
 	stats: LanguageStat[];
+	branch?: string;
 };
 
 export type ContributorStatsResult = {

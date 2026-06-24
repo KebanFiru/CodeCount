@@ -2,11 +2,19 @@ import type { LanguageStat } from '../../../types';
 import { escapeHtml, generateColors, getLanguageDescription, getLanguageFullName } from '../utils';
 
 export const renderLanguageCharts = (
-    result: { hasWorkspace: boolean; totalFiles: number; filteredFiles: number; stats: LanguageStat[] }
+    result: { hasWorkspace: boolean; totalFiles: number; filteredFiles: number; stats: LanguageStat[]; branch?: string }
 ): string => {
     if (!result.hasWorkspace || result.filteredFiles === 0 || result.stats.length === 0) {
         return '';
     }
+
+    const branchBadge = result.branch
+        ? `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;background:rgba(64,152,255,0.15);border:1px solid rgba(64,152,255,0.3);font-size:11px;font-weight:600;color:#4098ff;">
+               <span style="font-size:13px;">⎇</span> ${escapeHtml(result.branch)}
+           </span>`
+        : `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);font-size:11px;color:rgba(255,255,255,0.5);">
+               <span style="font-size:13px;">⎇</span> all branches
+           </span>`;
 
     const colors = generateColors(result.stats.length);
     const axisColor = '#ffffff';
@@ -25,7 +33,10 @@ export const renderLanguageCharts = (
 
     return `
         <div class="card">
-            <h2>Line Count by Language</h2>
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+                <h2 style="margin:0;">Line Count by Language</h2>
+                ${branchBadge}
+            </div>
             <div class="chart-container" style="height:560px;">
                 <canvas id="languageBarChart" height="560"></canvas>
             </div>
@@ -54,11 +65,19 @@ export const renderLanguageCharts = (
 };
 
 export const renderLanguageTable = (
-    result: { hasWorkspace: boolean; totalFiles: number; filteredFiles: number; stats: LanguageStat[] }
+    result: { hasWorkspace: boolean; totalFiles: number; filteredFiles: number; stats: LanguageStat[]; branch?: string }
 ): string => {
     if (!result.hasWorkspace || result.filteredFiles === 0 || result.stats.length === 0) {
         return '';
     }
+
+    const branchBadge = result.branch
+        ? `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;background:rgba(64,152,255,0.15);border:1px solid rgba(64,152,255,0.3);font-size:11px;font-weight:600;color:#4098ff;">
+               <span style="font-size:13px;">⎇</span> ${escapeHtml(result.branch)}
+           </span>`
+        : `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);font-size:11px;color:rgba(255,255,255,0.5);">
+               <span style="font-size:13px;">⎇</span> all branches
+           </span>`;
 
     const totalLines = result.stats.reduce((sum, s) => sum + s.lines, 0);
     const max = result.stats[0].lines || 1;
@@ -102,7 +121,10 @@ export const renderLanguageTable = (
 
     return `
         <div class="card">
-            <h2>Detailed Language Breakdown</h2>
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+                <h2 style="margin:0;">Detailed Language Breakdown</h2>
+                ${branchBadge}
+            </div>
             <div class="table">
                 ${showToggle ? `
                 <div id="languages-preview">${previewRows}</div>
