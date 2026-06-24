@@ -19,13 +19,13 @@
 - **Gitignore Support** — Automatically respects `.gitignore` patterns
 
 ### Git Analytics
-- **Branch-Aware Contributor Statistics** — Feature branches show contributors for that branch only; main/master shows full history with a branch badge when applicable
+- **Branch-Aware Statistics** — All three analytics sections (Language Distribution, Contributors, Repository Analytics) automatically scope to the current branch on feature branches and show full history on main/master, each with a branch badge indicating which view is active
 - **Commit Trends** — Visualize commits, additions, and deletions over time with selectable granularity:
   - Daily, Weekly, Monthly, Yearly
   - **By Days of the Week** — aggregate by day of week within any date range
   - **By Hour of Day** — aggregate by hour within any date range
 - **Date Range Filtering** — All granularities support start/end date pickers
-- **Repository Metrics** — Total contributors, commits, and lines changed
+- **Repository Metrics** — Total contributors, commits, lines added and deleted
 
 ### Interactive Dashboard
 - **Sidebar Tree View** — Quick stats in the Activity Bar with expandable sections
@@ -59,9 +59,9 @@ Click the **CodeCount** icon in the Activity Bar to open the sidebar. It shows:
 
 ### Analytics Dashboard
 Open via the sidebar shortcut or the **Open Analytics Dashboard** command. Features:
-- **Branch context awareness** — stats adapt to your current branch automatically
-- **Date range filtering** — restrict all charts to a custom date window
-- **Granularity selector** — switch between Daily / Weekly / Monthly / Yearly / By Days of the Week / By Hour views
+- **Branch context awareness** — Language, Contributor, and Repo Analytics sections all adapt to your current branch; each shows a branch badge (⎇ branch-name or ⎇ all branches)
+- **Date range filtering** — restrict all charts to a custom date window, including By Days of the Week and By Hour views
+- **Granularity selector** — switch between Daily / Weekly / Monthly / Yearly / By Days of the Week / By Hour
 - **Contributor file history** — click a file in the Contributors tab to diff any commit
 
 ## Architecture
