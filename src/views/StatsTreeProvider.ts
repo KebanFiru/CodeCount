@@ -6,7 +6,9 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 	private readonly _onDidChangeTreeData = new vscode.EventEmitter<StatsNode | undefined>();
 	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-	constructor(private readonly statsService: StatsService) {}
+	constructor(
+		private readonly statsService: StatsService,
+	) {}
 
 	refresh(): void {
 		this._onDidChangeTreeData.fire(undefined);
@@ -41,7 +43,7 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			// Data sections - clean and minimal
 			nodes.push(
 				new StatsNode('languages', 'Languages', vscode.TreeItemCollapsibleState.Collapsed),
-				new StatsNode('contributors', 'Contributors', vscode.TreeItemCollapsibleState.Collapsed)
+				new StatsNode('contributors', 'Contributors', vscode.TreeItemCollapsibleState.Collapsed),
 			);
 
 			return nodes;

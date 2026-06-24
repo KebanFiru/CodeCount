@@ -104,12 +104,10 @@ export const renderLanguageTable = (
         <div class="card">
             <h2>Detailed Language Breakdown</h2>
             <div class="table">
-                <div id="languages-preview">
-                    ${previewRows}
-                </div>
-                ${showToggle ? `<div id="languages-all" style="display:none;">
-                    ${allRowsHtml}
-                </div>` : allRowsHtml}
+                ${showToggle ? `
+                <div id="languages-preview">${previewRows}</div>
+                <div id="languages-all" style="display:none;">${allRowsHtml}</div>
+                ` : allRowsHtml}
             </div>
             ${showToggle ? `<div style="margin-top:8px;">
                 <button id="languages-toggle" class="link">Show all languages</button>

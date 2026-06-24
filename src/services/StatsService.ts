@@ -164,100 +164,39 @@ export class StatsService {
 		}
 
 		let stats: ContributorStat[] = [];
+		let branch: string | undefined;
 		try {
-			// Detect if on feature branch and get branch-specific contributors
 			let mergeBase: string | undefined;
 			try {
 				const currentBranch = (await this.execGit(['rev-parse', '--abbrev-ref', 'HEAD'], rootPath)).trim();
 				const isMainBranch = currentBranch === 'main' || currentBranch === 'master' || currentBranch === 'origin/main' || currentBranch === 'origin/master';
-				
-				// For feature branches, get merge base with main
+
 				if (!isMainBranch) {
 					try {
-						try {
-							mergeBase = (await this.execGit(['merge-base', 'HEAD', 'main'], rootPath)).trim();
-						} catch {
-							mergeBase = (await this.execGit(['merge-base', 'HEAD', 'master'], rootPath)).trim();
-						}
+						mergeBase = (await this.execGit(['merge-base', 'HEAD', 'main'], rootPath)).trim() || undefined;
 					} catch {
-						// Fallback to all history if merge base detection fails
-						mergeBase = undefined;
+						try {
+							mergeBase = (await this.execGit(['merge-base', 'HEAD', 'master'], rootPath)).trim() || undefined;
+						} catch {
+							// No main/master ref — show full history with no branch badge
+						}
+					}
+					// Only show the branch badge when we're actually filtering by merge base
+					if (mergeBase) {
+						branch = currentBranch;
 					}
 				}
 			} catch {
-				// If git operations fail, use all history
+				// If branch detection fails, use full history with no badge
 			}
 			stats = await this.getContributorStatsFromGit(rootPath, mergeBase);
 		} catch {
 			return { available: true, stats: [] };
 		}
 
-		let branch: string | undefined;
-		try {
-			branch = (await this.execGit(['rev-parse', '--abbrev-ref', 'HEAD'], rootPath)).trim();
-		} catch {
-			branch = undefined;
-		}
-
 		return { available: true, stats, branch };
 	}
 
-	async getContributorStatsAll(): Promise<ContributorStatsResult> {
-		const rootPath = await this.getGitRoot();
-		if (!rootPath) {
-			return { available: false, stats: [] };
-		}
-
-		let stats: ContributorStat[] = [];
-		try {
-			// Prefer walking the main branch history only (since project start).
-			// Fall back to master if main isn't present, otherwise fall back to --all.
-			let mainRef: string | undefined;
-			try {
-				await this.execGit(['rev-parse', '--verify', 'main'], rootPath);
-				mainRef = 'main';
-			} catch {
-				try {
-					await this.execGit(['rev-parse', '--verify', 'master'], rootPath);
-					mainRef = 'master';
-				} catch {
-					mainRef = undefined;
-				}
-			}
-			if (mainRef) {
-				// Use first-parent to follow the mainline history and avoid counting
-				// changes that only exist on merged feature branches.
-				const output = await this.execGit(
-					['log', mainRef, '--first-parent', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
-					rootPath
-				);
-				stats = this.parseContributorLog(output);
-			} else {
-				// Fallback to previous behavior (all refs)
-				stats = await this.getContributorStatsFromGitAll(rootPath);
-			}
-		} catch {
-			return { available: true, stats: [] };
-		}
-
-		// Indicate which ref was used for aggregation: main/master or 'all'
-		let branchLabel = 'all';
-		try {
-			// if main exists, indicate it; else if master exists, indicate it
-			await this.execGit(['rev-parse', '--verify', 'main'], rootPath);
-			branchLabel = 'main';
-		} catch {
-			try {
-				await this.execGit(['rev-parse', '--verify', 'master'], rootPath);
-				branchLabel = 'master';
-			} catch {
-				branchLabel = 'all';
-			}
-		}
-		return { available: true, stats, branch: branchLabel };
-	}
-
-	// Helper to parse contributor log output into ContributorStat[]
 	private parseContributorLog(output: string): ContributorStat[] {
 		const stats = new Map<string, { name: string; added: number; deleted: number }>();
 		let currentKey = 'unknown';
@@ -266,9 +205,10 @@ export class StatsService {
 		for (const line of lines) {
 			if (line.startsWith(GIT_AUTHOR_PREFIX)) {
 				const payload = line.slice(GIT_AUTHOR_PREFIX.length).trim();
-				const [namePart, emailPart] = payload.split('|');
-				currentName = (namePart ?? 'Unknown').trim() || 'Unknown';
-				const email = (emailPart ?? '').trim();
+				// Use lastIndexOf so that a pipe character in the author name doesn't discard the email
+				const sep = payload.lastIndexOf('|');
+				currentName = (sep >= 0 ? payload.slice(0, sep) : payload).trim() || 'Unknown';
+				const email = (sep >= 0 ? payload.slice(sep + 1) : '').trim();
 				currentKey = email || currentName;
 				if (!stats.has(currentKey)) {
 					stats.set(currentKey, { name: currentName, added: 0, deleted: 0 });
@@ -390,6 +330,8 @@ export class StatsService {
 				commitsByAuthor: [],
 				commitsByWeekday: Array.from({ length: 7 }, () => 0),
 				commitsByHour: Array.from({ length: 24 }, () => 0),
+				linesByWeekday: Array.from({ length: 7 }, () => 0),
+				linesByHour: Array.from({ length: 24 }, () => 0),
 				topChangedFiles: []
 			};
 		}
@@ -410,12 +352,16 @@ export class StatsService {
 			const byFile = new Map<string, { added: number; deleted: number }>();
 			const commitsByWeekday = Array.from({ length: 7 }, () => 0);
 			const commitsByHour = Array.from({ length: 24 }, () => 0);
+			const linesByWeekday = Array.from({ length: 7 }, () => 0);
+			const linesByHour = Array.from({ length: 24 }, () => 0);
 			let totalCommits = 0;
 			let totalAdded = 0;
 			let totalDeleted = 0;
 			let currentDateKey: string | undefined;
 			let currentMonthKey: string | undefined;
 			let currentAuthor: string | undefined;
+			let currentWeekday: number | undefined;
+			let currentHour: number | undefined;
 			let firstCommitDate: string | undefined;
 			let lastCommitDate: string | undefined;
 
@@ -453,6 +399,8 @@ export class StatsService {
 					currentDateKey = dateKey;
 					currentMonthKey = monthKey;
 					currentAuthor = author;
+					currentWeekday = weekday;
+					currentHour = (hour >= 0 && hour < 24) ? hour : undefined;
 					commitsByWeekday[weekday] += 1;
 					if (hour >= 0 && hour < 24) {
 						commitsByHour[hour] += 1;
@@ -497,6 +445,13 @@ export class StatsService {
 
 				totalAdded += added;
 				totalDeleted += deleted;
+
+				if (currentWeekday !== undefined) {
+					linesByWeekday[currentWeekday] += added;
+				}
+				if (currentHour !== undefined) {
+					linesByHour[currentHour] += added;
+				}
 
 				const dateBucket = byDate.get(currentDateKey);
 				if (dateBucket) {
@@ -598,6 +553,8 @@ export class StatsService {
 				commitsByAuthor,
 				commitsByWeekday,
 				commitsByHour,
+				linesByWeekday,
+				linesByHour,
 				topChangedFiles
 			};
 		} catch {
@@ -613,6 +570,8 @@ export class StatsService {
 				commitsByAuthor: [],
 				commitsByWeekday: Array.from({ length: 7 }, () => 0),
 				commitsByHour: Array.from({ length: 24 }, () => 0),
+				linesByWeekday: Array.from({ length: 7 }, () => 0),
+				linesByHour: Array.from({ length: 24 }, () => 0),
 				topChangedFiles: []
 			};
 		}
@@ -675,119 +634,12 @@ export class StatsService {
 	}
 
 	private async getContributorStatsFromGit(rootPath: string, mergeBase?: string): Promise<ContributorStat[]> {
-		// Use author email as the aggregation key to avoid duplicate names
-		// For feature branches, only show contributors to that specific branch
 		const logArgs = mergeBase ? [`${mergeBase}..HEAD`, '--numstat'] : ['HEAD', '--numstat'];
 		const output = await this.execGit(
 			['log', ...logArgs, `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
 			rootPath
 		);
-
-		const stats = new Map<string, { name: string; added: number; deleted: number }>();
-		let currentKey = 'unknown';
-		let currentName = 'Unknown';
-		const lines = output.split(/\r?\n/);
-		for (const line of lines) {
-			if (line.startsWith(GIT_AUTHOR_PREFIX)) {
-				const payload = line.slice(GIT_AUTHOR_PREFIX.length).trim();
-				const [namePart, emailPart] = payload.split('|');
-				currentName = (namePart ?? 'Unknown').trim() || 'Unknown';
-				const email = (emailPart ?? '').trim();
-				currentKey = email || currentName;
-				if (!stats.has(currentKey)) {
-					stats.set(currentKey, { name: currentName, added: 0, deleted: 0 });
-				}
-				continue;
-			}
-
-			if (!line.trim()) {
-				continue;
-			}
-
-			const parts = line.split('\t');
-			const addedText = parts[0];
-			const deletedText = parts[1];
-			const filePath = parts[2];
-			if (!addedText || addedText === '-' || !filePath) {
-				continue;
-			}
-
-			// Count changes even if the file no longer exists in the working tree
-			const normalizedPath = this.normalizeGitPath(filePath);
-			const added = Number(addedText);
-			const deleted = Number(deletedText ?? 0);
-			if (Number.isNaN(added) || Number.isNaN(deleted)) {
-				continue;
-			}
-
-			const current = stats.get(currentKey) ?? { name: currentName, added: 0, deleted: 0 };
-			current.added += added;
-			current.deleted += deleted;
-			stats.set(currentKey, current);
-		}
-
-		return Array.from(stats.entries())
-			.map(([key, v]) => ({ name: v.name, email: key && key.includes('@') ? key : undefined, added: v.added, deleted: v.deleted }))
-			// Filter out authors with no recorded changes (added + deleted === 0)
-			.filter(item => (item.added + item.deleted) > 0)
-			.sort((a, b) => (b.added + b.deleted) - (a.added + a.deleted));
-	}
-
-	private async getContributorStatsFromGitAll(rootPath: string): Promise<ContributorStat[]> {
-		// For "all" contributors we want to consider the entire repository
-		// history across all refs/branches. Use --all to include all refs.
-		// Aggregate by email to avoid duplicates across name variations.
-		const output = await this.execGit(
-			['log', '--all', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
-			rootPath
-		);
-
-		const stats = new Map<string, { name: string; added: number; deleted: number }>();
-		let currentKey = 'unknown';
-		let currentName = 'Unknown';
-		const lines = output.split(/\r?\n/);
-		for (const line of lines) {
-			if (line.startsWith(GIT_AUTHOR_PREFIX)) {
-				const payload = line.slice(GIT_AUTHOR_PREFIX.length).trim();
-				const [namePart, emailPart] = payload.split('|');
-				currentName = (namePart ?? 'Unknown').trim() || 'Unknown';
-				const email = (emailPart ?? '').trim();
-				currentKey = email || currentName;
-				if (!stats.has(currentKey)) {
-					stats.set(currentKey, { name: currentName, added: 0, deleted: 0 });
-				}
-				continue;
-			}
-
-			if (!line.trim()) {
-				continue;
-			}
-
-			const parts = line.split('\t');
-			const addedText = parts[0];
-			const deletedText = parts[1];
-			if (!addedText || addedText === '-') {
-				continue;
-			}
-
-			const added = Number(addedText);
-			const deleted = Number(deletedText ?? 0);
-			if (Number.isNaN(added) || Number.isNaN(deleted)) {
-				continue;
-			}
-
-			// Count changes even when files have been removed or renamed
-			const current = stats.get(currentKey) ?? { name: currentName, added: 0, deleted: 0 };
-			current.added += added;
-			current.deleted += deleted;
-			stats.set(currentKey, current);
-		}
-
-		return Array.from(stats.entries())
-			.map(([key, v]) => ({ name: v.name, email: key && key.includes('@') ? key : undefined, added: v.added, deleted: v.deleted }))
-			// Exclude authors with zero total changes when aggregating across all refs
-			.filter(item => (item.added + item.deleted) > 0)
-			.sort((a, b) => (b.added + b.deleted) - (a.added + a.deleted));
+		return this.parseContributorLog(output);
 	}
 
 	private async getContributorLanguageStatsFromGit(
@@ -810,9 +662,9 @@ export class StatsService {
 		for (const line of lines) {
 			if (line.startsWith(GIT_AUTHOR_PREFIX)) {
 				const payload = line.slice(GIT_AUTHOR_PREFIX.length).trim();
-				const [namePart, emailPart] = payload.split('|');
-				currentAuthorName = (namePart ?? 'Unknown').trim() || 'Unknown';
-				currentAuthorEmail = (emailPart ?? '').trim();
+				const sep = payload.lastIndexOf('|');
+				currentAuthorName = (sep >= 0 ? payload.slice(0, sep) : payload).trim() || 'Unknown';
+				currentAuthorEmail = (sep >= 0 ? payload.slice(sep + 1) : '').trim();
 				continue;
 			}
 
@@ -822,9 +674,9 @@ export class StatsService {
 
 			// Match either by provided name or email
 			if (authorName.includes('@')) {
-				if (currentAuthorEmail !== authorName) continue;
+				if (currentAuthorEmail !== authorName) { continue; }
 			} else {
-				if (currentAuthorName !== authorName) continue;
+				if (currentAuthorName !== authorName) { continue; }
 			}
 
 			const [addedText, , filePath] = line.split('\t');
@@ -871,9 +723,9 @@ export class StatsService {
 		for (const line of lines) {
 			if (line.startsWith(GIT_AUTHOR_PREFIX)) {
 				const payload = line.slice(GIT_AUTHOR_PREFIX.length).trim();
-				const [namePart, emailPart] = payload.split('|');
-				currentAuthorName = (namePart ?? 'Unknown').trim() || 'Unknown';
-				currentAuthorEmail = (emailPart ?? '').trim();
+				const sep = payload.lastIndexOf('|');
+				currentAuthorName = (sep >= 0 ? payload.slice(0, sep) : payload).trim() || 'Unknown';
+				currentAuthorEmail = (sep >= 0 ? payload.slice(sep + 1) : '').trim();
 				continue;
 			}
 
@@ -883,9 +735,9 @@ export class StatsService {
 
 			// Match either by provided name or email
 			if (authorName.includes('@')) {
-				if (currentAuthorEmail !== authorName) continue;
+				if (currentAuthorEmail !== authorName) { continue; }
 			} else {
-				if (currentAuthorName !== authorName) continue;
+				if (currentAuthorName !== authorName) { continue; }
 			}
 
 			const [addedText, deletedText, filePath] = line.split('\t');

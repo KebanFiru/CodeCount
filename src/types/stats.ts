@@ -62,5 +62,7 @@ export type RepoAnalyticsResult = {
 	commitsByAuthor: RepoAuthorStat[];
 	commitsByWeekday: number[];
 	commitsByHour: number[];
+	linesByWeekday: number[];
+	linesByHour: number[];
 	topChangedFiles: RepoTopFileStat[];
 };
