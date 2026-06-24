@@ -6,7 +6,9 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 	private readonly _onDidChangeTreeData = new vscode.EventEmitter<StatsNode | undefined>();
 	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-	constructor(private readonly statsService: StatsService) {}
+	constructor(
+		private readonly statsService: StatsService,
+	) {}
 
 	refresh(): void {
 		this._onDidChangeTreeData.fire(undefined);
@@ -42,7 +44,6 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			nodes.push(
 				new StatsNode('languages', 'Languages', vscode.TreeItemCollapsibleState.Collapsed),
 				new StatsNode('contributors', 'Contributors', vscode.TreeItemCollapsibleState.Collapsed),
-				new StatsNode('contributorsAll', 'All Contributors', vscode.TreeItemCollapsibleState.Collapsed)
 			);
 
 			return nodes;
@@ -56,10 +57,6 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			return this.getContributorNodes();
 		}
 
-		if (element.kind === 'contributorsAll') {
-			return this.getContributorAllNodes();
-		}
-
 		if (element.kind === 'language') {
 			const languageId = element.meta?.languageId ?? element.value ?? '';
 			return this.getLanguageFileNodes(languageId);
@@ -68,9 +65,7 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 		if (element.kind === 'contributor') {
 			return this.getContributorLanguageNodes(element.value ?? String(element.label));
 		}
-		if (element.kind === 'contributorAll') {
-			return [];
-		}
+
 
 		if (element.kind === 'contributorLanguage') {
 			const author = element.meta?.author ?? '';
@@ -194,7 +189,20 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 		);
 		totalNode.description = `${totalChanges.toLocaleString()} total changes`;
 
-		return [totalNode, ...effectiveStats.map((entry) => {
+		const nodes: StatsNode[] = [totalNode];
+
+		if (result.branch) {
+			const branchNote = new StatsNode(
+				'info',
+				'Branch view — Dashboard shows full history',
+				vscode.TreeItemCollapsibleState.None
+			);
+			branchNote.tooltip = 'Contributors are filtered to this branch. Open the Analytics Dashboard for all-time contributor history.';
+			branchNote.command = { command: 'codecount.openAnalytics', title: 'Open Analytics Dashboard' };
+			nodes.push(branchNote);
+		}
+
+		return [...nodes, ...effectiveStats.map((entry) => {
 			const entryTotal = entry.added + entry.deleted;
 			const percent = totalChanges > 0 ? Math.round((entryTotal / totalChanges) * 100) : 0;
 			const description = `${entryTotal.toLocaleString()} changes (${percent}%)`;
@@ -202,41 +210,6 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 			const node = new StatsNode('contributor', displayName, vscode.TreeItemCollapsibleState.Collapsed, entry.email ?? entry.name);
 			node.description = description;
 			node.tooltip = `+${entry.added.toLocaleString()} -${entry.deleted.toLocaleString()} by ${displayName}\nWorkspace changes`;
-			return node;
-		})];
-	}
-
-	private async getContributorAllNodes(): Promise<StatsNode[]> {
-		const result = await this.statsService.getContributorStatsAll();
-		if (!result.available) {
-			return [this.createGitMissingNode()];
-		}
-		if (result.stats.length === 0) {
-			return [new StatsNode('info', 'No Git history available', vscode.TreeItemCollapsibleState.None)];
-		}
-
-		// Only include contributors with recorded changes across repository history
-		const effectiveStats = result.stats.filter(s => (s.added + s.deleted) > 0);
-		if (effectiveStats.length === 0) {
-			return [new StatsNode('info', 'No contributors with changes found', vscode.TreeItemCollapsibleState.None)];
-		}
-
-		const totalChanges = effectiveStats.reduce((sum, s) => sum + (s.added + s.deleted), 0);
-		const totalNode = new StatsNode(
-			'info',
-			`Total contributors (all): ${effectiveStats.length}`,
-			vscode.TreeItemCollapsibleState.None
-		);
-		totalNode.description = `${totalChanges.toLocaleString()} total changes (repository)`;
-
-		return [totalNode, ...effectiveStats.map((entry) => {
-			const entryTotal = entry.added + entry.deleted;
-			const percent = totalChanges > 0 ? Math.round((entryTotal / totalChanges) * 100) : 0;
-			const description = `${entryTotal.toLocaleString()} changes (${percent}%)`;
-			const displayName = entry.name;
-			const node = new StatsNode('contributorAll', displayName, vscode.TreeItemCollapsibleState.None, entry.email ?? entry.name);
-			node.description = description;
-			node.tooltip = `+${entry.added.toLocaleString()} -${entry.deleted.toLocaleString()} in repository`;
 			return node;
 		})];
 	}
@@ -403,7 +376,7 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 
 export class StatsNode extends vscode.TreeItem {
 	constructor(
-		public readonly kind: 'dashboard' | 'languages' | 'contributors' | 'contributorsAll' | 'language' | 'languageFile' | 'contributor' | 'contributorAll' | 'contributorLanguage' | 'contributorFile' | 'info',
+		public readonly kind: 'dashboard' | 'languages' | 'contributors' | 'language' | 'languageFile' | 'contributor' | 'contributorLanguage' | 'contributorFile' | 'info',
 		label: string,
 		collapsibleState: vscode.TreeItemCollapsibleState,
 		public readonly value?: string,
@@ -413,7 +386,7 @@ export class StatsNode extends vscode.TreeItem {
 		if (kind === 'dashboard') {
 			this.iconPath = new vscode.ThemeIcon('open-preview');
 		}
-		if (kind === 'languages' || kind === 'contributors' || kind === 'contributorsAll') {
+		if (kind === 'languages' || kind === 'contributors') {
 			this.iconPath = new vscode.ThemeIcon('graph');
 		}
 		if (kind === 'info') {

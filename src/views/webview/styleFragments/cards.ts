@@ -2,28 +2,37 @@ export const cardStyles = `
 	.card {
 		background: var(--card);
 		border: 1px solid var(--border);
-		border-radius: 8px;
-		padding: 12px;
+		border-radius: var(--radius-card);
+		padding: 16px;
 		min-width: 0;
 		overflow: hidden;
 		display: flex;
 		flex-direction: column;
-		align-self: start;
 		align-items: stretch;
-		min-height: 220px;
+		min-height: 200px;
 		color: #ffffff;
+		box-shadow: var(--shadow-card);
+		transition: transform var(--transition), box-shadow var(--transition);
 	}
-	
+
+	.card:hover {
+		transform: translateY(-1px);
+		box-shadow: 0 4px 16px rgba(0,0,0,0.24), 0 1px 4px rgba(0,0,0,0.14);
+	}
+
 	.card h2 {
-		margin: 0 0 16px;
-		font-size: 14px;
+		margin: 0 0 14px;
+		font-size: 13px;
 		font-weight: 600;
+		letter-spacing: 0.2px;
+		color: #ffffff;
 	}
 
 	.card h3 {
-		margin: 16px 0 12px;
-		font-size: 13px;
+		margin: 14px 0 10px;
+		font-size: 12px;
 		font-weight: 600;
+		color: #ffffff;
 	}
 
 	/* Force white text inside cards for better readability as requested */

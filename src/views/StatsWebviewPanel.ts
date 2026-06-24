@@ -7,13 +7,16 @@ import {
 	renderLanguageCharts,
 	renderLanguageTable,
 	renderContributorsChart,
-	renderRepoAnalytics
+	renderRepoAnalytics,
 } from './webview/templates';
 
 export class StatsWebviewPanel {
 	private static currentPanel: StatsWebviewPanel | undefined;
 
-	static createOrShow(extensionUri: vscode.Uri, statsService: StatsService): void {
+	static createOrShow(
+		extensionUri: vscode.Uri,
+		statsService: StatsService,
+	): void {
 		const column = vscode.ViewColumn.One;
 		if (StatsWebviewPanel.currentPanel) {
 			StatsWebviewPanel.currentPanel.panel.reveal(column);
@@ -41,7 +44,7 @@ export class StatsWebviewPanel {
 	private constructor(
 		private readonly panel: vscode.WebviewPanel,
 		private readonly extensionUri: vscode.Uri,
-		private readonly statsService: StatsService
+		private readonly statsService: StatsService,
 	) {
 		this.panel.onDidDispose(() => this.dispose());
 	}
@@ -51,27 +54,29 @@ export class StatsWebviewPanel {
 	}
 
 	private async render(): Promise<void> {
-		const languageResult = await this.statsService.getLanguageStats();
-		const contributorResult = await this.statsService.getContributorStats();
-		const repoAnalytics = await this.statsService.getRepoAnalytics();
+		const [languageResult, contributorResult, repoAnalytics] =
+			await Promise.all([
+				this.statsService.getLanguageStats(),
+				this.statsService.getContributorStats(),
+				this.statsService.getRepoAnalytics(),
+			]);
 
-		this.panel.webview.html = this.getHtml(languageResult, contributorResult, repoAnalytics);
+		this.panel.webview.html = this.getHtml(
+			languageResult,
+			contributorResult,
+			repoAnalytics,
+		);
 	}
 
 	private getHtml(
 		languageResult: { hasWorkspace: boolean; totalFiles: number; filteredFiles: number; stats: LanguageStat[] },
 		contributorResult: { available: boolean; stats: ContributorStat[] },
-		repoAnalytics: RepoAnalyticsResult
+		repoAnalytics: RepoAnalyticsResult,
 	): string {
 		const csp = this.panel.webview.cspSource;
-		
-		// Filter out ignored files from main language stats
-		const validLanguageStats = languageResult.stats.filter(stat => stat.languageId !== 'ignore');
-		const cleanLanguageResult = {
-			...languageResult,
-			stats: validLanguageStats
-		};
 
+		const validLanguageStats = languageResult.stats.filter(stat => stat.languageId !== 'ignore');
+		const cleanLanguageResult = { ...languageResult, stats: validLanguageStats };
 		const totalLines = validLanguageStats.reduce((sum, stat) => sum + stat.lines, 0);
 		const ignoredCount = languageResult.totalFiles - languageResult.filteredFiles;
 
@@ -86,61 +91,62 @@ export class StatsWebviewPanel {
 	<style>
 		${getStyles()}
 	</style>
-
 </head>
 <body>
 	<div class="container">
+
 		<div class="header">
-		<div>
-			<h1>CodeCount</h1>
-			<div class="subtitle">Repository metrics and code insights</div>
+			<div>
+				<h1>CodeCount</h1>
+				<div class="subtitle">Repository metrics and code insights</div>
+			</div>
 		</div>
-	</div>
 
 		${renderStatsOverview(cleanLanguageResult, ignoredCount, totalLines)}
 
-		<div class="main-grid">
-			${renderLanguageCharts(cleanLanguageResult)}
-			${renderLanguageTable(cleanLanguageResult)}
+		<nav class="tab-bar" role="tablist">
+			<button class="tab active" role="tab" data-tab="languages">Languages</button>
+			<button class="tab" role="tab" data-tab="contributors">Contributors</button>
+			<button class="tab" role="tab" data-tab="analytics">Repo Analytics</button>
+		</nav>
+
+		<div id="tab-languages" class="tab-content active">
+			<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">
+				${renderLanguageCharts(cleanLanguageResult)}
+				${renderLanguageTable(cleanLanguageResult)}
+			</div>
+		</div>
+
+		<div id="tab-contributors" class="tab-content">
 			${renderContributorsChart(contributorResult)}
+		</div>
+
+		<div id="tab-analytics" class="tab-content">
 			${renderRepoAnalytics(repoAnalytics)}
 		</div>
+
 	</div>
 
 	<script>
-	(function(){
-		function packGrid(selector) {
-			const grid = document.querySelector(selector);
-			if (!grid) return;
-			const style = getComputedStyle(grid);
-			const rowHeight = parseInt(style.getPropertyValue('grid-auto-rows')) || 8;
-			const rowGap = parseInt(style.rowGap) || parseInt(style.getPropertyValue('gap')) || 12;
-			Array.from(grid.children).forEach((item) => {
-				const itemHeight = item.getBoundingClientRect().height;
-				// Add a small buffer to the calculated span to avoid off-by-one clipping
-				const h = Math.ceil((itemHeight + rowGap) / (rowHeight + rowGap)) + 1;
-				item.style.gridRowEnd = 'span ' + Math.max(1, h);
+	(function() {
+		// Tab switching
+		const tabs = document.querySelectorAll('.tab');
+		const contents = document.querySelectorAll('.tab-content');
+
+		tabs.forEach(function(tab) {
+			tab.addEventListener('click', function() {
+				const target = tab.getAttribute('data-tab');
+				tabs.forEach(function(t) { t.classList.remove('active'); });
+				contents.forEach(function(c) { c.classList.remove('active'); });
+				tab.classList.add('active');
+				const content = document.getElementById('tab-' + target);
+				if (content) { content.classList.add('active'); }
 			});
-		}
-
-		function runPack() {
-			packGrid('.main-grid');
-			packGrid('.two-col-grid');
-		}
-
-		window.__codecountRequestLayout = () => {
-			setTimeout(runPack, 120);
-		};
-
-		window.addEventListener('load', () => { window.__codecountRequestLayout?.(); });
-		window.addEventListener('resize', () => { window.__codecountRequestLayout?.(); });
-
-		const mo = new MutationObserver(() => { window.__codecountRequestLayout?.(); });
-		mo.observe(document.body, { childList: true, subtree: true, attributes: true });
+		});
 	})();
 	</script>
 
-	</body>
-	</html>`;
+</body>
+</html>`;
 	}
 }

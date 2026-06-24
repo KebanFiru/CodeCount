@@ -10,6 +10,7 @@ export type LanguageStatsResult = {
 	totalFiles: number;
 	filteredFiles: number;
 	stats: LanguageStat[];
+	branch?: string;
 };
 
 export type ContributorStatsResult = {
@@ -48,6 +49,7 @@ export type RepoMonthStat = {
 
 export type RepoAnalyticsResult = {
 	available: boolean;
+	branch?: string;
 	totalCommits: number;
 	activeDays: number;
 	firstCommitDate?: string;
@@ -62,5 +64,7 @@ export type RepoAnalyticsResult = {
 	commitsByAuthor: RepoAuthorStat[];
 	commitsByWeekday: number[];
 	commitsByHour: number[];
+	linesByWeekday: number[];
+	linesByHour: number[];
 	topChangedFiles: RepoTopFileStat[];
 };
