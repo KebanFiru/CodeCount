@@ -24,6 +24,41 @@ export class StatsService {
 		private readonly gitignoreService: GitignoreService
 	) {}
 
+	private isDefaultBranch(branch: string): boolean {
+		return branch === 'main' || branch === 'master' || branch === 'origin/main' || branch === 'origin/master';
+	}
+
+	private async resolveMergeBase(rootPath: string): Promise<string | undefined> {
+		try {
+			return (await this.execGit(['merge-base', 'HEAD', 'main'], rootPath)).trim() || undefined;
+		} catch {
+			try {
+				return (await this.execGit(['merge-base', 'HEAD', 'master'], rootPath)).trim() || undefined;
+			} catch {
+				return undefined;
+			}
+		}
+	}
+
+	private emptyRepoAnalytics(available: boolean): RepoAnalyticsResult {
+		return {
+			available,
+			totalCommits: 0,
+			activeDays: 0,
+			totalAdded: 0,
+			totalDeleted: 0,
+			avgLinesChangedPerCommit: 0,
+			commitsByDate: [],
+			commitsByMonth: [],
+			commitsByAuthor: [],
+			commitsByWeekday: Array.from({ length: 7 }, () => 0),
+			commitsByHour: Array.from({ length: 24 }, () => 0),
+			linesByWeekday: Array.from({ length: 7 }, () => 0),
+			linesByHour: Array.from({ length: 24 }, () => 0),
+			topChangedFiles: []
+		};
+	}
+
 	async getLanguageStats(): Promise<LanguageStatsResult> {
 		if (!vscode.workspace.workspaceFolders?.length) {
 			return { hasWorkspace: false, totalFiles: 0, filteredFiles: 0, stats: [] };
@@ -35,19 +70,11 @@ export class StatsService {
 		if (rootPath) {
 			try {
 				const currentBranch = (await this.execGit(['rev-parse', '--abbrev-ref', 'HEAD'], rootPath)).trim();
-				const isMainBranch = currentBranch === 'main' || currentBranch === 'master' || currentBranch === 'origin/main' || currentBranch === 'origin/master';
-				
+
 				// For feature branches, get files changed since merge base with main
-				if (!isMainBranch) {
+				if (!this.isDefaultBranch(currentBranch)) {
 					try {
-						// Find the merge base and get files changed since then
-						let mergeBase = '';
-						try {
-							mergeBase = (await this.execGit(['merge-base', 'HEAD', 'main'], rootPath)).trim();
-						} catch {
-							mergeBase = (await this.execGit(['merge-base', 'HEAD', 'master'], rootPath)).trim();
-						}
-						
+						const mergeBase = await this.resolveMergeBase(rootPath);
 						if (mergeBase) {
 							const filesOutput = await this.execGit(['log', `${mergeBase}..HEAD`, '--name-only', '--pretty='], rootPath);
 							branchFiles = new Set(
@@ -169,19 +196,8 @@ export class StatsService {
 			let mergeBase: string | undefined;
 			try {
 				const currentBranch = (await this.execGit(['rev-parse', '--abbrev-ref', 'HEAD'], rootPath)).trim();
-				const isMainBranch = currentBranch === 'main' || currentBranch === 'master' || currentBranch === 'origin/main' || currentBranch === 'origin/master';
-
-				if (!isMainBranch) {
-					try {
-						mergeBase = (await this.execGit(['merge-base', 'HEAD', 'main'], rootPath)).trim() || undefined;
-					} catch {
-						try {
-							mergeBase = (await this.execGit(['merge-base', 'HEAD', 'master'], rootPath)).trim() || undefined;
-						} catch {
-							// No main/master ref — show full history with no branch badge
-						}
-					}
-					// Only show the branch badge when we're actually filtering by merge base
+				if (!this.isDefaultBranch(currentBranch)) {
+					mergeBase = await this.resolveMergeBase(rootPath);
 					if (mergeBase) {
 						branch = currentBranch;
 					}
@@ -318,22 +334,7 @@ export class StatsService {
 	async getRepoAnalytics(): Promise<RepoAnalyticsResult> {
 		const rootPath = await this.getGitRoot();
 		if (!rootPath) {
-			return {
-				available: false,
-				totalCommits: 0,
-				activeDays: 0,
-				totalAdded: 0,
-				totalDeleted: 0,
-				avgLinesChangedPerCommit: 0,
-				commitsByDate: [],
-				commitsByMonth: [],
-				commitsByAuthor: [],
-				commitsByWeekday: Array.from({ length: 7 }, () => 0),
-				commitsByHour: Array.from({ length: 24 }, () => 0),
-				linesByWeekday: Array.from({ length: 7 }, () => 0),
-				linesByHour: Array.from({ length: 24 }, () => 0),
-				topChangedFiles: []
-			};
+			return this.emptyRepoAnalytics(false);
 		}
 
 		try {
@@ -447,10 +448,10 @@ export class StatsService {
 				totalDeleted += deleted;
 
 				if (currentWeekday !== undefined) {
-					linesByWeekday[currentWeekday] += added;
+					linesByWeekday[currentWeekday] += added + deleted;
 				}
 				if (currentHour !== undefined) {
-					linesByHour[currentHour] += added;
+					linesByHour[currentHour] += added + deleted;
 				}
 
 				const dateBucket = byDate.get(currentDateKey);
@@ -558,22 +559,7 @@ export class StatsService {
 				topChangedFiles
 			};
 		} catch {
-			return {
-				available: true,
-				totalCommits: 0,
-				activeDays: 0,
-				totalAdded: 0,
-				totalDeleted: 0,
-				avgLinesChangedPerCommit: 0,
-				commitsByDate: [],
-				commitsByMonth: [],
-				commitsByAuthor: [],
-				commitsByWeekday: Array.from({ length: 7 }, () => 0),
-				commitsByHour: Array.from({ length: 24 }, () => 0),
-				linesByWeekday: Array.from({ length: 7 }, () => 0),
-				linesByHour: Array.from({ length: 24 }, () => 0),
-				topChangedFiles: []
-			};
+			return this.emptyRepoAnalytics(true);
 		}
 	}
 

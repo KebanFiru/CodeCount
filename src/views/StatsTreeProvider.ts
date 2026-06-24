@@ -189,7 +189,20 @@ export class StatsTreeProvider implements vscode.TreeDataProvider<StatsNode> {
 		);
 		totalNode.description = `${totalChanges.toLocaleString()} total changes`;
 
-		return [totalNode, ...effectiveStats.map((entry) => {
+		const nodes: StatsNode[] = [totalNode];
+
+		if (result.branch) {
+			const branchNote = new StatsNode(
+				'info',
+				'Branch view — Dashboard shows full history',
+				vscode.TreeItemCollapsibleState.None
+			);
+			branchNote.tooltip = 'Contributors are filtered to this branch. Open the Analytics Dashboard for all-time contributor history.';
+			branchNote.command = { command: 'codecount.openAnalytics', title: 'Open Analytics Dashboard' };
+			nodes.push(branchNote);
+		}
+
+		return [...nodes, ...effectiveStats.map((entry) => {
 			const entryTotal = entry.added + entry.deleted;
 			const percent = totalChanges > 0 ? Math.round((entryTotal / totalChanges) * 100) : 0;
 			const description = `${entryTotal.toLocaleString()} changes (${percent}%)`;

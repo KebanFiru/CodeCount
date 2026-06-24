@@ -240,15 +240,16 @@ export const renderRepoAnalytics = (result: RepoAnalyticsResult): string => {
                 var filteredTotal = src.commits.reduce(function(a, b) { return a + b; }, 0);
                 var globalTotal   = hourCommits.reduce(function(a, b) { return a + b; }, 0);
                 var scale = (globalTotal > 0 && filteredTotal < globalTotal) ? filteredTotal / globalTotal : 1;
+                var commits = hourCommits.map(function(c) { return Math.round(c * scale); });
+                var added   = hourAvgLines.map(function(avg, i) {
+                    return commits[i] > 0 ? Math.round(avg * commits[i]) : 0;
+                });
                 return {
                     labels:   hourLabels,
-                    commits:  hourCommits.map(function(c) { return Math.round(c * scale); }),
-                    added:    hourAvgLines.map(function(avg, i) {
-                                  var sc = Math.round(hourCommits[i] * scale);
-                                  return sc > 0 ? Math.round(avg * sc) : 0;
-                              }),
+                    commits:  commits,
+                    added:    added,
                     deleted:  Array(24).fill(0),
-                    avgLines: hourAvgLines.map(function(avg, i) { return Math.round(avg * scale); })
+                    avgLines: added.map(function(a, i) { return commits[i] > 0 ? Math.round(a / commits[i]) : 0; })
                 };
             }
 
