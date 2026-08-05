@@ -1,17 +1,57 @@
+/**
+ * The theme's chart palette, as CSS custom-property references. Safe anywhere CSS
+ * is evaluated (inline styles, stylesheets) — but NOT for Chart.js, which paints to
+ * a canvas and cannot resolve `var()`. Charts use `window.CCTheme.seriesList()`
+ * from `chartTheme.ts`, which resolves the same tokens at runtime.
+ */
+const CHART_COLOR_TOKENS = [
+	'--vscode-charts-blue',
+	'--vscode-charts-green',
+	'--vscode-charts-orange',
+	'--vscode-charts-purple',
+	'--vscode-charts-yellow',
+	'--vscode-charts-red',
+];
+
 export const generateColors = (count: number): string[] => {
-	const hues = [
-		'hsl(200, 70%, 50%)',
-		'hsl(140, 70%, 50%)',
-		'hsl(40, 70%, 50%)',
-		'hsl(10, 70%, 50%)',
-		'hsl(270, 70%, 50%)',
-		'hsl(120, 70%, 50%)',
-		'hsl(320, 70%, 50%)',
-		'hsl(60, 70%, 50%)',
-		'hsl(180, 70%, 50%)',
-		'hsl(330, 70%, 50%)',
-	];
-	return Array.from({ length: count }, (_, i) => hues[i % hues.length]);
+	return Array.from({ length: count }, (_, i) => {
+		const token = CHART_COLOR_TOKENS[i % CHART_COLOR_TOKENS.length];
+		const cycle = Math.floor(i / CHART_COLOR_TOKENS.length);
+		if (cycle === 0) {
+			return `var(${token})`;
+		}
+		// Extend the palette past the six theme hues by blending toward the
+		// foreground/background, keeping every colour inside the theme.
+		const mixTarget = cycle % 2 === 1 ? 'var(--vscode-editor-foreground)' : 'var(--vscode-editor-background)';
+		const weight = Math.max(45, 100 - 22 * Math.ceil(cycle / 2));
+		return `color-mix(in srgb, var(${token}) ${weight}%, ${mixTarget})`;
+	});
+};
+
+/** Clamp a bar width to a sane, non-overflowing percentage. */
+export const barWidth = (value: number, max: number): number => {
+	if (!Number.isFinite(value) || !Number.isFinite(max) || max <= 0) {
+		return 0;
+	}
+	return Math.min(100, Math.max(1, Math.round((value / max) * 100)));
+};
+
+export const formatNumber = (value: number): string => {
+	return Number.isFinite(value) ? value.toLocaleString() : '0';
+};
+
+/** Compact a repo-relative path so long directory chains don't dominate a row. */
+export const shortenPath = (filePath: string, maxLength = 48): string => {
+	if (filePath.length <= maxLength) {
+		return filePath;
+	}
+	const segments = filePath.split('/');
+	const name = segments.pop() ?? filePath;
+	let prefix = '';
+	while (segments.length > 0 && `${prefix}${segments[segments.length - 1]}/`.length + name.length + 2 < maxLength) {
+		prefix = `${segments.pop()}/${prefix}`;
+	}
+	return prefix ? `…/${prefix}${name}` : `…/${name}`;
 };
 
 export const getLanguageFullName = (languageId: string): string => {

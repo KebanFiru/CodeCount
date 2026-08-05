@@ -1,9 +1,13 @@
 {
   "name": "CodeLineCounter",
-  "displayName": "CodeLineCounter",
-  "description": "A tool for learn how much line of code your project contains",
-  "version": "3.1.0",
+  "displayName": "CodeCount",
+  "description": "Branch-aware code analytics: line counts, contributor churn, commit rhythm and language breakdowns, right inside VS Code.",
+  "version": "4.0.0",
   "icon": "resources/codecount.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "publisher": "KebanFiru",
   "license": "MIT",
   "homepage": "https://github.com/KebanFiru/CodeCount#readme",
@@ -18,7 +22,21 @@
     "vscode": "^1.115.0"
   },
   "categories": [
+    "Visualization",
+    "SCM Providers",
     "Other"
+  ],
+  "keywords": [
+    "line counter",
+    "code statistics",
+    "git analytics",
+    "contributors",
+    "commit history",
+    "loc",
+    "cloc",
+    "code metrics",
+    "dashboard",
+    "branch"
   ],
   "activationEvents": [
     "onCommand:codecount.countLines",
@@ -43,7 +61,8 @@
       "codecount": [
         {
           "id": "codecount.stats",
-          "name": "CodeCount"
+          "name": "CodeCount",
+          "type": "webview"
         }
       ]
     },
@@ -71,6 +90,10 @@
       {
         "command": "codecount.gitRepoMissing",
         "title": "Git Repo Missing"
+      },
+      {
+        "command": "codecount.openFileHistory",
+        "title": "Show File History"
       }
     ],
     "menus": {

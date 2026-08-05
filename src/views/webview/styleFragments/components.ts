@@ -1,17 +1,11 @@
 export const componentStyles = `
-	@keyframes grow-bar {
-		from { width: 0%; }
-	}
+	.muted { color: var(--muted); }
+	.tiny { font-size: 11px; }
 
-	/* Utilities */
-	.muted {
-		color: var(--muted);
-	}
-
-	/* Metric Grid */
+	/* ── Metric grid ────────────────────────────────────── */
 	.metric-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 		gap: 10px;
 	}
 
@@ -19,23 +13,24 @@ export const componentStyles = `
 		padding: 12px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
-		background: color-mix(in srgb, var(--card) 60%, var(--bg) 40%);
+		background: var(--surface-2);
 		min-width: 0;
 	}
 
 	.metric-title {
-		font-size: 11px;
+		font-size: 10px;
 		text-transform: uppercase;
 		color: var(--muted);
 		font-weight: 600;
-		letter-spacing: 0.4px;
+		letter-spacing: 0.6px;
 	}
 
 	.metric-value {
 		font-size: 18px;
 		font-weight: 700;
 		margin-top: 4px;
-		word-break: break-word;
+		overflow-wrap: anywhere;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.metric-note {
@@ -44,56 +39,135 @@ export const componentStyles = `
 		margin-top: 2px;
 	}
 
-	/* Files Table */
-	.files-table {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto auto;
-		gap: 8px 12px;
-		align-items: center;
+	/* ── Key/value stat list (cadence card) ─────────────── */
+	.kv-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0;
 		font-size: 12px;
 	}
 
-	.files-table > * {
-		min-width: 0;
+	.kv-list > div {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 7px 0;
+		border-bottom: 1px solid var(--border);
 	}
 
-	.file-path {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		overflow-wrap: anywhere;
-		word-break: break-word;
-		color: var(--fg);
-		font-size: 12px;
-		max-width: 100%;
-	}
-
-	/* Ignored Files Section */
-	.ignored-section {
-		background: var(--surface-2);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-card);
-		padding: 16px;
-		margin-top: 16px;
-	}
-
-	.ignored-section h4 {
-		margin: 0 0 10px;
-		font-size: 12px;
+	.kv-list > div:last-child { border-bottom: none; }
+	.kv-list dt, .kv-list .k { color: var(--muted); }
+	.kv-list dd, .kv-list .v {
+		margin: 0;
 		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
 	}
 
-	.ignored-count {
-		font-size: 22px;
-		font-weight: 700;
-		margin: 8px 0;
+	/* ── Language ratio strip ───────────────────────────── */
+	.ratio-strip {
+		display: flex;
+		height: 10px;
+		border-radius: 999px;
+		overflow: hidden;
+		gap: 2px;
+		background: color-mix(in srgb, var(--fg) 10%, transparent);
 	}
 
-	.ignored-note {
+	.ratio-strip > span {
+		display: block;
+		height: 100%;
+		min-width: 2px;
+	}
+
+	.ratio-legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 14px;
 		font-size: 11px;
 		color: var(--muted);
 	}
 
-	/* Empty State */
+	.ratio-legend > span {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	/* ── Punch card (weekday x hour) ────────────────────── */
+	.punch {
+		display: grid;
+		grid-template-columns: auto repeat(24, minmax(0, 1fr));
+		gap: 3px;
+		align-items: center;
+		min-width: 0;
+	}
+
+	.punch-day {
+		font-size: 10px;
+		color: var(--muted);
+		padding-right: 6px;
+		white-space: nowrap;
+	}
+
+	.punch-hour {
+		font-size: 9px;
+		color: var(--muted);
+		text-align: center;
+		overflow: hidden;
+	}
+
+	.punch-cell {
+		aspect-ratio: 1;
+		border-radius: 2px;
+		background: color-mix(in srgb, var(--fg) 7%, transparent);
+		min-width: 0;
+	}
+
+	.punch-cell[data-level="1"] { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+	.punch-cell[data-level="2"] { background: color-mix(in srgb, var(--accent) 50%, transparent); }
+	.punch-cell[data-level="3"] { background: color-mix(in srgb, var(--accent) 72%, transparent); }
+	.punch-cell[data-level="4"] { background: var(--accent); }
+
+	/* ── Histogram (commit size) ────────────────────────── */
+	.histogram {
+		display: grid;
+		grid-template-columns: auto auto minmax(0, 1fr) auto;
+		gap: 6px 10px;
+		align-items: center;
+		font-size: 11px;
+	}
+
+	.histogram .h-label { font-weight: 600; }
+	.histogram .h-note { color: var(--muted); white-space: nowrap; }
+	.histogram .h-count {
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+		color: var(--muted);
+	}
+
+	/* ── Buttons & links ────────────────────────────────── */
+	.link {
+		background: none;
+		border: none;
+		color: var(--accent);
+		cursor: pointer;
+		font-size: 12px;
+		font-family: inherit;
+		padding: 4px 0;
+		font-weight: 500;
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+
+	.link:hover { color: var(--fg); }
+	.link:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
+
+	/* Collapsed lists reveal their tail without duplicating markup. */
+	.collapsible.is-collapsed > *:nth-child(n + 6) { display: none; }
+
+	/* ── States ─────────────────────────────────────────── */
 	.empty-state {
 		padding: 32px 16px;
 		text-align: center;
@@ -101,27 +175,24 @@ export const componentStyles = `
 		font-size: 12px;
 	}
 
-	/* Link button style */
-	.link {
-		background: none;
-		border: none;
-		color: rgba(255,255,255,0.7);
-		cursor: pointer;
-		font-size: 12px;
-		padding: 4px 0;
-		text-decoration: none;
-		font-weight: 500;
-		border-bottom: 1px solid rgba(255,255,255,0.3);
-		transition: color var(--transition), border-color var(--transition);
+	.chart-legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 16px;
+		font-size: 11px;
+		color: var(--muted);
 	}
 
-	.link:hover {
-		color: #ffffff;
-		border-bottom-color: #ffffff;
+	.chart-legend > span {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
 	}
 
-	/* Animated progress bar */
-	.bar > span {
-		animation: grow-bar 0.5s ease-out both;
+	.legend-key {
+		width: 12px;
+		height: 3px;
+		border-radius: 999px;
+		flex-shrink: 0;
 	}
 `;

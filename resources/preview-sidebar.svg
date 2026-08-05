@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 560" width="340" height="560" role="img" aria-label="CodeCount sidebar: branch status, line and file totals, and an expandable language breakdown">
+<rect x="0" y="0" width="340" height="560" fill="#252526" rx="10"/>
+<text x="14" y="26" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9.5" font-weight="600" letter-spacing="1.1">CODECOUNT</text>
+<rect x="0" y="36" width="340" height="1" fill="#3c3c3c" />
+<text x="14" y="60" fill="#e7e7e7" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600">⎇  fix/branch-sensitivity</text>
+<text x="18" y="76" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9.5">4 ahead · 0 behind main</text>
+<rect x="14" y="90" width="152" height="54" fill="#2a2a2b" rx="7" stroke="#3c3c3c"/>
+<text x="90" y="116" fill="#e7e7e7" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="18" font-weight="700" text-anchor="middle">12,480</text>
+<text x="90" y="131" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="8.5" text-anchor="middle" letter-spacing="0.7">LINES</text>
+<rect x="174" y="90" width="152" height="54" fill="#2a2a2b" rx="7" stroke="#3c3c3c"/>
+<text x="250" y="116" fill="#e7e7e7" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="18" font-weight="700" text-anchor="middle">24</text>
+<text x="250" y="131" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="8.5" text-anchor="middle" letter-spacing="0.7">FILES</text>
+<rect x="14" y="156" width="312" height="28" fill="#2a2a2b" rx="7" stroke="#3c3c3c"/>
+<rect x="17" y="159" width="153" height="22" fill="#4e94ce" rx="5" opacity="0.22"/>
+<text x="92" y="174" fill="#4e94ce" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10.5" font-weight="600" text-anchor="middle">Languages</text>
+<text x="248" y="174" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10.5" text-anchor="middle">Contributors</text>
+<rect x="14" y="194" width="312" height="26" fill="#1e1e1e" rx="6" stroke="#3c3c3c"/>
+<text x="24" y="211" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="11">⌕</text>
+<text x="40" y="211" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="10.5">filter…</text>
+<text x="14" y="246" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9">▾</text>
+<text x="30" y="247" fill="#e7e7e7" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600">TypeScript</text>
+<text x="326" y="247" fill="#cccccc" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="end">8,486</text>
+<rect x="30" y="256" width="260" height="6" fill="#e7e7e7" rx="3" opacity="0.1"/>
+<rect x="30" y="256" width="176.8" height="6" fill="#4e94ce" rx="3"/>
+<text x="326" y="262" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9" text-anchor="end">68%</text>
+<rect x="30" y="271" width="296" height="22" fill="#e7e7e7" rx="4" opacity="0.035"/>
+<text x="42" y="286" fill="#cccccc" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5">StatsService.ts</text>
+<text x="320" y="286" fill="#8c8c8c" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="10" text-anchor="end">891</text>
+<rect x="30" y="295" width="296" height="22" fill="#e7e7e7" rx="4" opacity="0.035"/>
+<text x="42" y="310" fill="#cccccc" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5">StatsTreeProvider.ts</text>
+<text x="320" y="310" fill="#8c8c8c" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="10" text-anchor="end">397</text>
+<rect x="30" y="319" width="296" height="22" fill="#e7e7e7" rx="4" opacity="0.035"/>
+<text x="42" y="334" fill="#cccccc" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5">extension.ts</text>
+<text x="320" y="334" fill="#8c8c8c" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="10" text-anchor="end">209</text>
+<text x="14" y="362" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9">▸</text>
+<text x="30" y="363" fill="#e7e7e7" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600">JSON</text>
+<text x="326" y="363" fill="#cccccc" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="end">1,742</text>
+<rect x="30" y="372" width="260" height="6" fill="#e7e7e7" rx="3" opacity="0.1"/>
+<rect x="30" y="372" width="36.4" height="6" fill="#57a64a" rx="3"/>
+<text x="326" y="378" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9" text-anchor="end">14%</text>
+<text x="14" y="400" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9">▸</text>
+<text x="30" y="401" fill="#e7e7e7" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600">Markdown</text>
+<text x="326" y="401" fill="#cccccc" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="end">1,120</text>
+<rect x="30" y="410" width="260" height="6" fill="#e7e7e7" rx="3" opacity="0.1"/>
+<rect x="30" y="410" width="23.4" height="6" fill="#d18616" rx="3"/>
+<text x="326" y="416" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9" text-anchor="end">9%</text>
+<text x="14" y="438" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9">▸</text>
+<text x="30" y="439" fill="#e7e7e7" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600">YAML</text>
+<text x="326" y="439" fill="#cccccc" font-family="ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="end">632</text>
+<rect x="30" y="448" width="260" height="6" fill="#e7e7e7" rx="3" opacity="0.1"/>
+<rect x="30" y="448" width="13" height="6" fill="#b180d7" rx="3"/>
+<text x="326" y="454" fill="#8c8c8c" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="9" text-anchor="end">5%</text>
+<rect x="14" y="514" width="312" height="1" fill="#3c3c3c" />
+<text x="18" y="538" fill="#4e94ce" font-family="ui-sans-serif,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="11" font-weight="500">⤢   Open Analytics Dashboard</text>
+</svg>

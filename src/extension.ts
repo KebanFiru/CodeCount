@@ -4,9 +4,64 @@ import { LineCounter } from './services/LineCounter';
 import { GitignoreService } from './services/GitignoreService';
 import { WorkspaceLineCounter } from './services/WorkspaceLineCounter';
 import { LineCounterByFileFormat } from './services/LineCounterByFileFormat';
-import { StatsTreeProvider } from './views/StatsTreeProvider';
+import { StatsSidebarProvider } from './views/StatsSidebarProvider';
 import { StatsService } from './services/StatsService';
 import { StatsWebviewPanel } from './views/StatsWebviewPanel';
+import { runGit } from './services/GitCli';
+import type { FileHistoryEntry } from './types';
+
+async function showHistoryPicker(
+	entries: FileHistoryEntry[],
+	filePath: string,
+	rootPath: string,
+	titlePrefix: string
+): Promise<void> {
+	const pick = await vscode.window.showQuickPick(
+		entries.map((entry) => ({
+			label: `${entry.date}  ${entry.hash}`,
+			description: entry.author,
+			detail: entry.subject,
+			hash: entry.hash
+		})),
+		{
+			placeHolder: 'Select a commit to view changes',
+			matchOnDescription: true,
+			matchOnDetail: true
+		}
+	);
+	if (!pick) {
+		return;
+	}
+
+	const gitPath = path.isAbsolute(filePath) ? filePath : path.join(rootPath, filePath);
+	const fileUri = vscode.Uri.file(gitPath);
+	const encode = (ref: string) =>
+		fileUri.with({
+			scheme: 'git',
+			query: JSON.stringify({ path: fileUri.fsPath, ref })
+		});
+
+	let hasParent = true;
+	try {
+		await runGit(['rev-parse', '-q', '--verify', `${pick.hash}^`], rootPath);
+	} catch {
+		hasParent = false;
+	}
+
+	if (!hasParent) {
+		await vscode.commands.executeCommand('vscode.open', encode(pick.hash));
+		return;
+	}
+
+	const left = encode(`${pick.hash}^`);
+	const right = encode(pick.hash);
+	await vscode.commands.executeCommand(
+		'vscode.diff',
+		left,
+		right,
+		`${titlePrefix}: ${filePath} (${pick.hash})`
+	);
+}
 
 export function activate(context: vscode.ExtensionContext) {
 	const lineCounter = new LineCounter();
@@ -14,7 +69,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const workspaceLineCounter = new WorkspaceLineCounter(lineCounter, gitignoreService);
 	const lineCounterByFileFormat = new LineCounterByFileFormat(workspaceLineCounter);
 	const statsService = new StatsService(lineCounter, gitignoreService);
-	const statsProvider = new StatsTreeProvider(statsService);
+	const statsProvider = new StatsSidebarProvider(statsService);
 
 	let branchRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 	const scheduleBranchRefresh = () => {
@@ -23,6 +78,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		branchRefreshTimer = setTimeout(() => {
 			gitignoreService.clearCache();
+			statsService.clearCache();
 			statsProvider.refresh();
 			StatsWebviewPanel.refreshIfOpen();
 			branchRefreshTimer = undefined;
@@ -116,6 +172,10 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	const refreshStats = vscode.commands.registerCommand('codecount.refreshStats', () => {
+		// An explicit refresh must drop the cached branch scope too, otherwise it
+		// re-renders the same stale data the user asked to refresh away from.
+		gitignoreService.clearCache();
+		statsService.clearCache();
 		statsProvider.refresh();
 		StatsWebviewPanel.refreshIfOpen();
 	});
@@ -162,35 +222,44 @@ export function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			const pick = await vscode.window.showQuickPick(
-				history.entries.map((entry) => ({
-					label: `${entry.date}  ${entry.hash}`,
-					hash: entry.hash
-				})),
-				{
-					placeHolder: 'Select a commit to view changes'
-				}
-			);
-			if (!pick) {
+			await showHistoryPicker(history.entries, filePath, rootPath, `Changes by ${author}`);
+		}
+	);
+
+	const openFileHistory = vscode.commands.registerCommand(
+		'codecount.openFileHistory',
+		async (args?: { filePath?: string; absolutePath?: string }) => {
+			const filePath = args?.filePath;
+			if (!filePath) {
+				return;
+			}
+			const rootPath = await statsService.getGitRootPath();
+			if (!rootPath) {
+				vscode.window.showWarningMessage('Git repository not found.');
 				return;
 			}
 
-			const gitPath = path.isAbsolute(filePath) ? filePath : path.join(rootPath, filePath);
-			const fileUri = vscode.Uri.file(gitPath);
-			const encode = (ref: string) =>
-				fileUri.with({
-					scheme: 'git',
-					query: JSON.stringify({ path: fileUri.fsPath, ref })
-				});
+			const absolutePath = vscode.Uri.file(args?.absolutePath ?? path.join(rootPath, filePath));
+			try {
+				await vscode.workspace.fs.stat(absolutePath);
+				const document = await vscode.workspace.openTextDocument(absolutePath);
+				await vscode.window.showTextDocument(document, { preview: false });
+			} catch {
+				vscode.window.showWarningMessage('File not found in workspace.');
+				return;
+			}
 
-			const left = encode(`${pick.hash}^`);
-			const right = encode(pick.hash);
-			await vscode.commands.executeCommand(
-				'vscode.diff',
-				left,
-				right,
-				`Changes by ${author}: ${filePath} (${pick.hash})`
-			);
+			const history = await statsService.getFileHistory(filePath);
+			if (!history.available) {
+				vscode.window.showWarningMessage('Git repository not found.');
+				return;
+			}
+			if (history.entries.length === 0) {
+				vscode.window.showInformationMessage('No history found for this file.');
+				return;
+			}
+
+			await showHistoryPicker(history.entries, filePath, rootPath, 'File history');
 		}
 	);
 
@@ -201,8 +270,11 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(openAnalytics);
 	context.subscriptions.push(gitRepoMissing);
 	context.subscriptions.push(openContributorFile);
+	context.subscriptions.push(openFileHistory);
 	context.subscriptions.push(
-		vscode.window.registerTreeDataProvider('codecount.stats', statsProvider)
+		vscode.window.registerWebviewViewProvider('codecount.stats', statsProvider, {
+			webviewOptions: { retainContextWhenHidden: true }
+		})
 	);
 }
 

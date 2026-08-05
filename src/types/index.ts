@@ -1,13 +1,16 @@
 export type { GitignoreMatcher, GitignoreRule } from './gitignore';
 export type { LineCountResult } from './lineCount';
 export type {
-	ContributorFileHistoryEntry,
+	FileHistoryEntry,
 	ContributorFileStat,
 	ContributorLanguageStat,
 	ContributorStat,
 	ContributorStatsResult,
 	RepoAnalyticsResult,
+	RepoAuthorStat,
 	RepoCommitTrendStat,
+	RepoCommitTuple,
+	RepoMonthStat,
 	RepoTopFileStat,
 	LanguageStat,
 	LanguageFileStat,
