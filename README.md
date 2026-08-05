@@ -15,7 +15,7 @@ Line counts, contributor churn, commit rhythm and language breakdowns, scoped to
 
 **Zero runtime dependencies · Works offline · Follows your theme**
 
-<img src="https://raw.githubusercontent.com/KebanFiru/CodeCount/main/resources/preview-dashboard.svg" width="100%" alt="CodeCount analytics dashboard showing stat tiles, a commit activity chart, a weekday-by-hour punch card and a commit size histogram">
+<img src="https://raw.githubusercontent.com/KebanFiru/CodeCount/main/resources/preview-dashboard.png" width="100%" alt="CodeCount analytics dashboard showing stat tiles, a commit activity chart, a weekday-by-hour punch card and a commit size histogram">
 
 </div>
 
@@ -57,7 +57,7 @@ Heavy git work happens on expand, never on open  so the panel stays responsive o
 </td>
 <td width="48%" valign="top">
 
-<img src="https://raw.githubusercontent.com/KebanFiru/CodeCount/main/resources/preview-sidebar.svg" width="100%" alt="CodeCount sidebar showing branch status, line and file totals, and an expanded TypeScript language row listing its files">
+<img src="https://raw.githubusercontent.com/KebanFiru/CodeCount/main/resources/preview-sidebar.png" width="100%" alt="CodeCount sidebar showing branch status, line and file totals, and an expanded TypeScript language row listing its files">
 
 </td>
 </tr>
