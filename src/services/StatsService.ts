@@ -1,10 +1,10 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { execFile } from 'child_process';
 import { LineCounter } from './LineCounter';
 import { GitignoreService } from './GitignoreService';
+import { runGit, isDefaultBranch, resolveMergeBase, normalizeGitPath } from './GitCli';
 import type {
-	ContributorFileHistoryEntry,
+	FileHistoryEntry,
 	ContributorFileStat,
 	ContributorLanguageStat,
 	ContributorStat,
@@ -12,31 +12,90 @@ import type {
 	LanguageStat,
 	LanguageFileStat,
 	LanguageStatsResult,
-	RepoAnalyticsResult
+	RepoAnalyticsResult,
+	RepoCommitTuple
 } from '../types';
 
 const GIT_AUTHOR_PREFIX = '--AUTHOR--';
 const GIT_COMMIT_PREFIX = '--COMMIT--';
+const FILE_LOG_PREFIX = '--LOG--';
+
+type BranchScope = {
+	branch?: string;
+	files?: Set<string>;
+	range?: string;
+	mergeBase?: string;
+	hasCommits: boolean;
+	ahead: number;
+	behind: number;
+};
 
 export class StatsService {
+	private branchScopeCache?: Promise<BranchScope>;
+
 	constructor(
 		private readonly lineCounter: LineCounter,
 		private readonly gitignoreService: GitignoreService
 	) {}
 
-	private isDefaultBranch(branch: string): boolean {
-		return branch === 'main' || branch === 'master' || branch === 'origin/main' || branch === 'origin/master';
+	clearCache(): void {
+		this.branchScopeCache = undefined;
 	}
 
-	private async resolveMergeBase(rootPath: string): Promise<string | undefined> {
+	private emptyBranchScope(): BranchScope {
+		return { hasCommits: false, ahead: 0, behind: 0 };
+	}
+
+	private getBranchScope(rootPath: string): Promise<BranchScope> {
+		if (!this.branchScopeCache) {
+			this.branchScopeCache = this.computeBranchScope(rootPath);
+		}
+		return this.branchScopeCache;
+	}
+
+	private async computeBranchScope(rootPath: string): Promise<BranchScope> {
 		try {
-			return (await this.execGit(['merge-base', 'HEAD', 'main'], rootPath)).trim() || undefined;
-		} catch {
-			try {
-				return (await this.execGit(['merge-base', 'HEAD', 'master'], rootPath)).trim() || undefined;
-			} catch {
-				return undefined;
+			const currentBranch = (await this.execGit(['rev-parse', '--abbrev-ref', 'HEAD'], rootPath)).trim();
+			if (isDefaultBranch(currentBranch)) {
+				return this.emptyBranchScope();
 			}
+
+			const mergeBase = await resolveMergeBase(rootPath);
+			if (!mergeBase) {
+				return this.emptyBranchScope();
+			}
+
+			const [countOutput, diffOutput, untrackedOutput] = await Promise.all([
+				this.execGit(['rev-list', '--count', '--left-right', `${mergeBase}...HEAD`], rootPath),
+				this.execGit(['diff', '--name-only', mergeBase], rootPath),
+				this.execGit(['ls-files', '--others', '--exclude-standard'], rootPath)
+			]);
+
+			const [behindStr, aheadStr] = countOutput.trim().split(/\s+/);
+			const behind = parseInt(behindStr, 10) || 0;
+			const ahead = parseInt(aheadStr, 10) || 0;
+
+			const files = new Set(
+				[...diffOutput.split(/\r?\n/), ...untrackedOutput.split(/\r?\n/)]
+					.map(line => line.trim())
+					.filter(line => line.length > 0)
+			);
+
+			if (ahead === 0 && files.size === 0) {
+				return this.emptyBranchScope();
+			}
+
+			return {
+				branch: currentBranch,
+				files,
+				range: ahead > 0 ? `${mergeBase}..HEAD` : undefined,
+				mergeBase,
+				hasCommits: ahead > 0,
+				ahead,
+				behind
+			};
+		} catch {
+			return this.emptyBranchScope();
 		}
 	}
 
@@ -51,75 +110,40 @@ export class StatsService {
 			commitsByDate: [],
 			commitsByMonth: [],
 			commitsByAuthor: [],
-			commitsByWeekday: Array.from({ length: 7 }, () => 0),
-			commitsByHour: Array.from({ length: 24 }, () => 0),
-			linesByWeekday: Array.from({ length: 7 }, () => 0),
-			linesByHour: Array.from({ length: 24 }, () => 0),
-			topChangedFiles: []
+			topChangedFiles: [],
+			authors: [],
+			commits: []
 		};
 	}
 
 	async getLanguageStats(): Promise<LanguageStatsResult> {
 		if (!vscode.workspace.workspaceFolders?.length) {
-			return { hasWorkspace: false, totalFiles: 0, filteredFiles: 0, stats: [] };
+			return { hasWorkspace: false, totalFiles: 0, filteredFiles: 0, ignoredFiles: 0, stats: [] };
 		}
 
-		// Detect if on feature branch and get branch-specific file list
-		let branchFiles: Set<string> | undefined;
-		let activeBranch: string | undefined;
 		const rootPath = await this.getGitRoot();
-		if (rootPath) {
-			try {
-				const currentBranch = (await this.execGit(['rev-parse', '--abbrev-ref', 'HEAD'], rootPath)).trim();
-
-				// For feature branches, get files changed since merge base with main
-				if (!this.isDefaultBranch(currentBranch)) {
-					try {
-						const mergeBase = await this.resolveMergeBase(rootPath);
-						if (mergeBase) {
-							const filesOutput = await this.execGit(['log', `${mergeBase}..HEAD`, '--name-only', '--pretty='], rootPath);
-							const fileSet = new Set(
-								filesOutput
-									.split(/\r?\n/)
-									.map(line => line.trim())
-									.filter(line => line.length > 0)
-							);
-							// Only scope to branch files when there are actual new commits;
-							// an empty set would filter out every file.
-							if (fileSet.size > 0) {
-								branchFiles = fileSet;
-								activeBranch = currentBranch;
-							}
-						}
-					} catch {
-						// Fallback to all files if branch diff fails
-						branchFiles = undefined;
-					}
-				}
-			} catch {
-				// If git operations fail, use all files
-			}
-		}
+		const scope = rootPath ? await this.getBranchScope(rootPath) : this.emptyBranchScope();
 
 		const files = await vscode.workspace.findFiles(
 			'**/*',
 			'**/{node_modules,out,dist,.git}/**'
 		);
 		if (files.length === 0) {
-			return { hasWorkspace: true, totalFiles: 0, filteredFiles: 0, stats: [] };
+			return { hasWorkspace: true, totalFiles: 0, filteredFiles: 0, ignoredFiles: 0, stats: [] };
 		}
 
 		const filtered = await this.filterIgnoredFiles(files);
+		// Count of .gitignore exclusions, measured before any branch scoping is applied.
+		const ignoredFiles = files.length - filtered.length;
 		if (filtered.length === 0) {
-			return { hasWorkspace: true, totalFiles: files.length, filteredFiles: 0, stats: [] };
+			return { hasWorkspace: true, totalFiles: files.length, filteredFiles: 0, ignoredFiles, stats: [] };
 		}
 
-		// Filter to branch-specific files if on feature branch
 		let filesToCount = filtered;
-		if (branchFiles && branchFiles.size > 0) {
-			const workspaceRoot = vscode.workspace.workspaceFolders![0].uri.fsPath;
+		if (rootPath && scope.files && scope.files.size > 0) {
+			const branchFiles = scope.files;
 			filesToCount = filtered.filter(uri => {
-				const relativePath = path.relative(workspaceRoot, uri.fsPath).replace(/\\/g, '/');
+				const relativePath = path.relative(rootPath, uri.fsPath).replace(/\\/g, '/');
 				return branchFiles.has(relativePath);
 			});
 		}
@@ -143,13 +167,16 @@ export class StatsService {
 		return {
 			hasWorkspace: true,
 			totalFiles: files.length,
-			filteredFiles: branchFiles && branchFiles.size > 0 ? filesToCount.length : filtered.length,
+			filteredFiles: scope.files && scope.files.size > 0 ? filesToCount.length : filtered.length,
+			ignoredFiles,
 			stats: entries,
-			branch: activeBranch
+			branch: scope.branch,
+			ahead: scope.branch ? scope.ahead : undefined,
+			behind: scope.branch ? scope.behind : undefined
 		};
 	}
 
-	async getLanguageFileStats(languageId: string): Promise<{ available: boolean; stats: LanguageFileStat[] }> {
+	async getFileStats(): Promise<{ available: boolean; stats: LanguageFileStat[]; branch?: string }> {
 		if (!vscode.workspace.workspaceFolders?.length) {
 			return { available: false, stats: [] };
 		}
@@ -162,25 +189,37 @@ export class StatsService {
 			return { available: true, stats: [] };
 		}
 
-		const filtered = await this.filterIgnoredFiles(files);
+		let filtered = await this.filterIgnoredFiles(files);
 		if (filtered.length === 0) {
 			return { available: true, stats: [] };
+		}
+
+		const rootPath = await this.getGitRoot();
+		const scope = rootPath ? await this.getBranchScope(rootPath) : this.emptyBranchScope();
+		if (rootPath && scope.files && scope.files.size > 0) {
+			const branchFiles = scope.files;
+			filtered = filtered.filter(uri => {
+				const relativePath = path.relative(rootPath, uri.fsPath).replace(/\\/g, '/');
+				return branchFiles.has(relativePath);
+			});
 		}
 
 		const stats: LanguageFileStat[] = [];
 		for (const uri of filtered) {
 			try {
 				const document = await vscode.workspace.openTextDocument(uri);
-				if (document.languageId !== languageId) {
-					continue;
-				}
 				const lines = this.lineCounter.countDocumentLines(document);
 				const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-				const rootPath = workspaceFolder?.uri.fsPath;
-				const relativePath = rootPath
-					? path.relative(rootPath, uri.fsPath).replace(/\\/g, '/')
+				const fileRoot = workspaceFolder?.uri.fsPath;
+				const relativePath = fileRoot
+					? path.relative(fileRoot, uri.fsPath).replace(/\\/g, '/')
 					: uri.fsPath;
-				stats.push({ filePath: relativePath, absolutePath: uri.fsPath, lines });
+				stats.push({
+					filePath: relativePath,
+					absolutePath: uri.fsPath,
+					lines,
+					languageId: document.languageId || 'unknown'
+				});
 			} catch {
 				continue;
 			}
@@ -188,7 +227,16 @@ export class StatsService {
 
 		return {
 			available: true,
-			stats: stats.sort((a, b) => b.lines - a.lines)
+			stats: stats.sort((a, b) => b.lines - a.lines),
+			branch: scope.branch
+		};
+	}
+
+	async getLanguageFileStats(languageId: string): Promise<{ available: boolean; stats: LanguageFileStat[]; branch?: string }> {
+		const result = await this.getFileStats();
+		return {
+			...result,
+			stats: result.stats.filter(stat => stat.languageId === languageId)
 		};
 	}
 
@@ -198,32 +246,22 @@ export class StatsService {
 			return { available: false, stats: [] };
 		}
 
+		const scope = await this.getBranchScope(rootPath);
+		const range = scope.range ?? 'HEAD';
+
 		let stats: ContributorStat[] = [];
-		let branch: string | undefined;
 		try {
-			let mergeBase: string | undefined;
-			try {
-				const currentBranch = (await this.execGit(['rev-parse', '--abbrev-ref', 'HEAD'], rootPath)).trim();
-				if (!this.isDefaultBranch(currentBranch)) {
-					mergeBase = await this.resolveMergeBase(rootPath);
-					if (mergeBase) {
-						const countStr = (await this.execGit(['rev-list', '--count', `${mergeBase}..HEAD`], rootPath)).trim();
-						if (parseInt(countStr, 10) > 0) {
-							branch = currentBranch;
-						} else {
-							mergeBase = undefined; // no new commits — show full history
-						}
-					}
-				}
-			} catch {
-				// If branch detection fails, use full history with no badge
-			}
-			stats = await this.getContributorStatsFromGit(rootPath, mergeBase);
+			stats = await this.getContributorStatsFromGit(rootPath, range);
 		} catch {
 			return { available: true, stats: [] };
 		}
 
-		return { available: true, stats, branch };
+		return {
+			available: true,
+			stats,
+			branch: scope.branch,
+			branchHasCommits: scope.branch ? scope.hasCommits : undefined
+		};
 	}
 
 	private parseContributorLog(output: string): ContributorStat[] {
@@ -234,7 +272,6 @@ export class StatsService {
 		for (const line of lines) {
 			if (line.startsWith(GIT_AUTHOR_PREFIX)) {
 				const payload = line.slice(GIT_AUTHOR_PREFIX.length).trim();
-				// Use lastIndexOf so that a pipe character in the author name doesn't discard the email
 				const sep = payload.lastIndexOf('|');
 				currentName = (sep >= 0 ? payload.slice(0, sep) : payload).trim() || 'Unknown';
 				const email = (sep >= 0 ? payload.slice(sep + 1) : '').trim();
@@ -309,35 +346,77 @@ export class StatsService {
 		return { available: true, stats };
 	}
 
-	async getContributorFileHistory(
-		authorName: string,
-		filePath: string
-	): Promise<{ available: boolean; entries: ContributorFileHistoryEntry[] }> {
+
+	private async readFileLog(
+		rootPath: string,
+		filePath: string,
+		author?: string,
+		limit = 200
+	): Promise<FileHistoryEntry[]> {
+		const args = [
+			'log',
+			'--follow',
+			'--date=short',
+			'-n',
+			String(limit),
+			`--pretty=${FILE_LOG_PREFIX}%h|%ad|%an|%s`
+		];
+		if (author) {
+			args.push(`--author=${author}`);
+		}
+		args.push('--', filePath);
+
+		const output = await this.execGit(args, rootPath);
+		const entries: FileHistoryEntry[] = [];
+		for (const rawLine of output.split(/\r?\n/)) {
+			if (!rawLine.startsWith(FILE_LOG_PREFIX)) {
+				continue;
+			}
+			const line = rawLine.slice(FILE_LOG_PREFIX.length);
+			const firstPipe = line.indexOf('|');
+			const secondPipe = firstPipe >= 0 ? line.indexOf('|', firstPipe + 1) : -1;
+			const thirdPipe = secondPipe >= 0 ? line.indexOf('|', secondPipe + 1) : -1;
+			if (firstPipe < 0 || secondPipe < 0 || thirdPipe < 0) {
+				continue;
+			}
+
+			const hash = line.slice(0, firstPipe).trim();
+			const date = line.slice(firstPipe + 1, secondPipe).trim();
+			const entryAuthor = line.slice(secondPipe + 1, thirdPipe).trim();
+			const subject = line.slice(thirdPipe + 1).trim();
+			if (!hash) {
+				continue;
+			}
+			entries.push({ hash, date, author: entryAuthor, subject });
+		}
+		return entries;
+	}
+
+	async getFileHistory(filePath: string): Promise<{ available: boolean; entries: FileHistoryEntry[] }> {
 		const rootPath = await this.getGitRoot();
 		if (!rootPath) {
 			return { available: false, entries: [] };
 		}
 
 		try {
-			const output = await this.execGit(
-				[
-					'log',
-					`--author=${authorName}`,
-					'--date=short',
-					'--pretty=%h %ad',
-					'--',
-					filePath
-				],
-				rootPath
-			);
-			const entries = output
-				.split(/\r?\n/)
-				.map((line) => line.trim())
-				.filter((line) => line.length > 0)
-				.map((line) => {
-					const [hash, date] = line.split(' ');
-					return { hash, date };
-				});
+			const entries = await this.readFileLog(rootPath, filePath);
+			return { available: true, entries };
+		} catch {
+			return { available: true, entries: [] };
+		}
+	}
+
+	async getContributorFileHistory(
+		authorName: string,
+		filePath: string
+	): Promise<{ available: boolean; entries: FileHistoryEntry[] }> {
+		const rootPath = await this.getGitRoot();
+		if (!rootPath) {
+			return { available: false, entries: [] };
+		}
+
+		try {
+			const entries = await this.readFileLog(rootPath, filePath, authorName);
 			return { available: true, entries };
 		} catch {
 			return { available: true, entries: [] };
@@ -351,25 +430,9 @@ export class StatsService {
 		}
 
 		try {
-			let branch: string | undefined;
-			let logRange = 'HEAD';
-			try {
-				const currentBranch = (await this.execGit(['rev-parse', '--abbrev-ref', 'HEAD'], rootPath)).trim();
-				if (!this.isDefaultBranch(currentBranch)) {
-					const mergeBase = await this.resolveMergeBase(rootPath);
-						if (mergeBase) {
-						// Only scope to branch when it has new commits; an empty range
-						// would make every chart show zeros.
-						const countStr = (await this.execGit(['rev-list', '--count', `${mergeBase}..HEAD`], rootPath)).trim();
-						if (parseInt(countStr, 10) > 0) {
-							logRange = `${mergeBase}..HEAD`;
-							branch = currentBranch;
-						}
-					}
-				}
-			} catch {
-				// Branch detection failed — fall back to full HEAD history
-			}
+			const scope = await this.getBranchScope(rootPath);
+			const branch = scope.branch;
+			const logRange = scope.range ?? 'HEAD';
 
 			const output = await this.execGit(
 				['log', logRange, '--first-parent', '--date=iso-strict', `--pretty=${GIT_COMMIT_PREFIX}%aI|%aE|%an`, '--numstat'],
@@ -380,24 +443,30 @@ export class StatsService {
 			const byMonth = new Map<string, { commits: number; added: number; deleted: number }>();
 			const byAuthor = new Map<string, { name: string; email?: string; commits: number; added: number; deleted: number }>();
 			const byFile = new Map<string, { added: number; deleted: number }>();
-			const commitsByWeekday = Array.from({ length: 7 }, () => 0);
-			const commitsByHour = Array.from({ length: 24 }, () => 0);
-			const linesByWeekday = Array.from({ length: 7 }, () => 0);
-			const linesByHour = Array.from({ length: 24 }, () => 0);
+			const authorIndex = new Map<string, number>();
+			const authors: string[] = [];
+			const commits: RepoCommitTuple[] = [];
 			let totalCommits = 0;
 			let totalAdded = 0;
 			let totalDeleted = 0;
 			let currentDateKey: string | undefined;
 			let currentMonthKey: string | undefined;
 			let currentAuthor: string | undefined;
-			let currentWeekday: number | undefined;
-			let currentHour: number | undefined;
 			let firstCommitDate: string | undefined;
 			let lastCommitDate: string | undefined;
+			let pending: { epochDay: number; hour: number; authorIdx: number; added: number; deleted: number } | undefined;
+
+			const flushPending = () => {
+				if (pending) {
+					commits.push([pending.epochDay, pending.hour, pending.added, pending.deleted, pending.authorIdx]);
+					pending = undefined;
+				}
+			};
 
 			const lines = output.split(/\r?\n/);
 			for (const line of lines) {
 				if (line.startsWith(GIT_COMMIT_PREFIX)) {
+					flushPending();
 					const payload = line.slice(GIT_COMMIT_PREFIX.length).trim();
 					const parts = payload.split('|');
 					const dateTime = parts[0];
@@ -421,20 +490,16 @@ export class StatsService {
 						continue;
 					}
 
-					const weekday = date.getDay();
+					const [y, mo, d] = dateKey.split('-').map(Number);
+					const epochDay = Math.floor(Date.UTC(y, mo - 1, d) / 86_400_000);
 					const hourMatch = dateTime.match(/T(\d{2}):/);
-					const hour = hourMatch ? Number(hourMatch[1]) : date.getHours();
+					const parsedHour = hourMatch ? Number(hourMatch[1]) : date.getHours();
+					const hour = (parsedHour >= 0 && parsedHour < 24) ? parsedHour : 0;
 
 					totalCommits += 1;
 					currentDateKey = dateKey;
 					currentMonthKey = monthKey;
 					currentAuthor = author;
-					currentWeekday = weekday;
-					currentHour = (hour >= 0 && hour < 24) ? hour : undefined;
-					commitsByWeekday[weekday] += 1;
-					if (hour >= 0 && hour < 24) {
-						commitsByHour[hour] += 1;
-					}
 
 					if (!lastCommitDate) {
 						lastCommitDate = dateKey;
@@ -453,8 +518,15 @@ export class StatsService {
 					const authorBucket = byAuthor.get(key) ?? { name: authorName || author, email: authorEmail || undefined, commits: 0, added: 0, deleted: 0 };
 					authorBucket.commits += 1;
 					byAuthor.set(key, authorBucket);
-					// store the aggregation key so following numstat lines map correctly
 					currentAuthor = key;
+
+					let authorIdx = authorIndex.get(key);
+					if (authorIdx === undefined) {
+						authorIdx = authors.length;
+						authorIndex.set(key, authorIdx);
+						authors.push(authorBucket.name);
+					}
+					pending = { epochDay, hour, authorIdx, added: 0, deleted: 0 };
 					continue;
 				}
 
@@ -476,11 +548,9 @@ export class StatsService {
 				totalAdded += added;
 				totalDeleted += deleted;
 
-				if (currentWeekday !== undefined) {
-					linesByWeekday[currentWeekday] += added + deleted;
-				}
-				if (currentHour !== undefined) {
-					linesByHour[currentHour] += added + deleted;
+				if (pending) {
+					pending.added += added;
+					pending.deleted += deleted;
 				}
 
 				const dateBucket = byDate.get(currentDateKey);
@@ -504,12 +574,13 @@ export class StatsService {
 					byAuthor.set(currentAuthor, authorBucket);
 				}
 
-				const normalizedPath = this.normalizeGitPath(filePath);
+				const normalizedPath = normalizeGitPath(filePath);
 				const fileBucket = byFile.get(normalizedPath) ?? { added: 0, deleted: 0 };
 				fileBucket.added += added;
 				fileBucket.deleted += deleted;
 				byFile.set(normalizedPath, fileBucket);
 			}
+			flushPending();
 
 			const commitsByDate = Array.from(byDate.entries())
 				.map(([date, value]) => ({
@@ -570,6 +641,7 @@ export class StatsService {
 			return {
 				available: true,
 				branch,
+				branchHasCommits: branch ? scope.hasCommits : undefined,
 				totalCommits,
 				activeDays: commitsByDate.length,
 				firstCommitDate,
@@ -582,11 +654,9 @@ export class StatsService {
 				commitsByDate,
 				commitsByMonth,
 				commitsByAuthor,
-				commitsByWeekday,
-				commitsByHour,
-				linesByWeekday,
-				linesByHour,
-				topChangedFiles
+				topChangedFiles,
+				authors,
+				commits
 			};
 		} catch {
 			return this.emptyRepoAnalytics(true);
@@ -649,10 +719,9 @@ export class StatsService {
 		}
 	}
 
-	private async getContributorStatsFromGit(rootPath: string, mergeBase?: string): Promise<ContributorStat[]> {
-		const logArgs = mergeBase ? [`${mergeBase}..HEAD`, '--numstat'] : ['HEAD', '--numstat'];
+	private async getContributorStatsFromGit(rootPath: string, range: string): Promise<ContributorStat[]> {
 		const output = await this.execGit(
-			['log', ...logArgs, `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
+			['log', range, '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
 			rootPath
 		);
 		return this.parseContributorLog(output);
@@ -662,9 +731,7 @@ export class StatsService {
 		rootPath: string,
 		authorName: string
 	): Promise<ContributorLanguageStat[]> {
-		// Include author email so we can match by name or email when authorName may be an email
 		const output = await this.execGit(
-			// Include full history reachable from HEAD (include merges)
 			['log', 'HEAD', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
 			rootPath
 		);
@@ -688,7 +755,6 @@ export class StatsService {
 				continue;
 			}
 
-			// Match either by provided name or email
 			if (authorName.includes('@')) {
 				if (currentAuthorEmail !== authorName) { continue; }
 			} else {
@@ -705,7 +771,7 @@ export class StatsService {
 				continue;
 			}
 
-			const normalizedPath = this.normalizeGitPath(filePath);
+			const normalizedPath = normalizeGitPath(filePath);
 			const exists = await this.fileExists(rootPath, normalizedPath, existsCache);
 			if (!exists) {
 				continue;
@@ -724,7 +790,6 @@ export class StatsService {
 		authorName: string,
 		languageId: string
 	): Promise<ContributorFileStat[]> {
-		// Include author email so we can match by name or email when authorName may be an email
 		const output = await this.execGit(
 			['log', 'HEAD', '--numstat', `--pretty=${GIT_AUTHOR_PREFIX}%an|%aE`],
 			rootPath
@@ -749,7 +814,6 @@ export class StatsService {
 				continue;
 			}
 
-			// Match either by provided name or email
 			if (authorName.includes('@')) {
 				if (currentAuthorEmail !== authorName) { continue; }
 			} else {
@@ -770,7 +834,7 @@ export class StatsService {
 				continue;
 			}
 
-			const normalizedPath = this.normalizeGitPath(filePath);
+			const normalizedPath = normalizeGitPath(filePath);
 			const exists = await this.fileExists(rootPath, normalizedPath, existsCache);
 			if (!exists) {
 				continue;
@@ -789,15 +853,6 @@ export class StatsService {
 		return Array.from(fileTotals.entries())
 			.map(([filePath, totals]) => ({ filePath, added: totals.added, deleted: totals.deleted }))
 			.sort((a, b) => (b.added + b.deleted) - (a.added + a.deleted));
-	}
-
-	private normalizeGitPath(filePath: string): string {
-		const trimmed = filePath.trim();
-		const renameMatch = trimmed.split('=>');
-		if (renameMatch.length > 1) {
-			return renameMatch[renameMatch.length - 1].replace(/[{}]/g, '').trim();
-		}
-		return trimmed;
 	}
 
 	private async getLanguageForPath(
@@ -854,14 +909,6 @@ export class StatsService {
 	}
 
 	private execGit(args: string[], cwd: string): Promise<string> {
-		return new Promise((resolve, reject) => {
-			execFile('git', args, { cwd }, (error, stdout) => {
-				if (error) {
-					reject(error);
-					return;
-				}
-				resolve(stdout.toString());
-			});
-		});
+		return runGit(args, cwd);
 	}
 }

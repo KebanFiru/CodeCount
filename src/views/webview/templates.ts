@@ -1,9 +1,7 @@
-import type { RepoAnalyticsResult } from '../../types';
-import { renderStatsOverview } from './components/overview';
-import { renderLanguageCharts, renderLanguageTable } from './components/language';
-import { renderContributorsChart } from './components/contributors';
-import { renderRepoAnalytics } from './components/repoAnalytics';
-import { renderIgnoredFilesSection } from './components/ignoredFiles';
+import { renderStatsOverview, renderOverviewTab } from './components/overview';
+import { renderLanguageCharts, renderLanguageTable, renderLargestFiles } from './components/language';
+import { renderContributorsChart, renderContributorTimeline } from './components/contributors';
+import { renderActivityTab } from './components/activity';
 
 export const getLogoSvg = (): string => {
 	return `<svg class="logo" viewBox="0 0 24 24" aria-hidden="true">
@@ -11,5 +9,14 @@ export const getLogoSvg = (): string => {
 	</svg>`;
 };
 
-// Re-export component functions for clean API
-export { renderStatsOverview, renderLanguageCharts, renderLanguageTable, renderContributorsChart, renderRepoAnalytics, renderIgnoredFilesSection };
+// Re-export component functions for a clean import surface.
+export {
+	renderStatsOverview,
+	renderOverviewTab,
+	renderLanguageCharts,
+	renderLanguageTable,
+	renderLargestFiles,
+	renderContributorsChart,
+	renderContributorTimeline,
+	renderActivityTab,
+};

@@ -1,185 +1,236 @@
-import type { ContributorStat } from '../../../types';
-import { escapeHtml, generateColors } from '../utils';
+import type { ContributorStatsResult, RepoAnalyticsResult } from '../../../types';
+import { buildConcentration } from '../analytics';
+import { barWidth, escapeHtml, formatNumber, generateColors } from '../utils';
+import { renderBranchChip, renderBranchNotice, renderCardHead } from './shared';
+
+const renderTeamCard = (
+	effective: ContributorStatsResult['stats'],
+	colors: string[],
+	totalChanges: number
+): string => {
+	const concentration = buildConcentration(effective);
+	const segments = effective.map((stat, idx) => {
+		const total = stat.added + stat.deleted;
+		const percent = totalChanges > 0 ? (total / totalChanges) * 100 : 0;
+		const label = `${stat.name} — ${formatNumber(total)} changes (${percent.toFixed(1)}%)`;
+		return `<span style="flex:${total};background:${colors[idx]};" title="${escapeHtml(label)}"></span>`;
+	}).join('');
+
+	const legend = effective.slice(0, 6).map((stat, idx) => {
+		const total = stat.added + stat.deleted;
+		const percent = totalChanges > 0 ? Math.round((total / totalChanges) * 100) : 0;
+		return `<span><span class="swatch" style="background:${colors[idx]}"></span>${escapeHtml(stat.name)} ${percent}%</span>`;
+	}).join('');
+
+	const summary = [
+		`${effective.length} contributor${effective.length === 1 ? '' : 's'}`,
+		`bus factor ${concentration.busFactor}`,
+		`top author owns ${Math.round(concentration.topShare)}% of churn`,
+	].join(' · ');
+
+	return `
+		<div class="card">
+			${renderCardHead('Team')}
+			<div class="tiny muted">${escapeHtml(summary)}</div>
+			<div class="ratio-strip" aria-hidden="true">${segments}</div>
+			<div class="ratio-legend">${legend}</div>
+		</div>
+	`;
+};
 
 export const renderContributorsChart = (
-    result: { available: boolean; stats: ContributorStat[]; branch?: string }
+	result: ContributorStatsResult,
+	analytics: RepoAnalyticsResult,
+	nonce: string
 ): string => {
-    if (!result.available || result.stats.length === 0) {
-        return `
-            <div class="card">
-                <h2>Contributors</h2>
-                <p class="muted">${result.available ? 'No Git history available.' : 'Git repository not found.'}</p>
-            </div>
-        `;
-    }
+	if (!result.available) {
+		return `<div class="card">${renderCardHead('Contributors')}<p class="muted">Git repository not found.</p></div>`;
+	}
 
-    const colors = generateColors(result.stats.length);
-    const effectiveStats = result.stats.filter(s => (s.added + s.deleted) > 0);
-    const totalAdded = effectiveStats.reduce((sum, s) => sum + s.added, 0);
-    const totalDeleted = effectiveStats.reduce((sum, s) => sum + s.deleted, 0);
-    const netChange = totalAdded - totalDeleted;
-    const topContributor = effectiveStats[0];
-    const avgLines = effectiveStats.length > 0
-        ? Math.round((totalAdded + totalDeleted) / effectiveStats.length)
-        : 0;
+	if (result.branchHasCommits === false) {
+		return renderBranchNotice(result.branch, 0);
+	}
 
-    const showToggle = effectiveStats.length > 5;
-    const maxChanges = effectiveStats.length > 0 ? Math.max(1, effectiveStats[0].added + effectiveStats[0].deleted) : 1;
+	const effective = result.stats.filter(s => (s.added + s.deleted) > 0);
+	if (effective.length === 0) {
+		return `<div class="card">${renderCardHead('Contributors')}<p class="muted">No contributors with code changes found.</p></div>`;
+	}
 
-    const renderRow = (stat: ContributorStat, idx: number) => {
-        const total = stat.added + stat.deleted;
-        const displayName = escapeHtml(stat.name);
-        const barPercent = Math.max(1, Math.round((total / maxChanges) * 100));
-        const addedPct = total > 0 ? Math.round((stat.added / total) * 100) : 0;
-        return `
-            <div class="row">
-                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <div style="width:10px;height:10px;border-radius:50%;background:${colors[idx]};flex-shrink:0;"></div>
-                        <strong style="font-size:13px;">${displayName}</strong>
-                    </div>
-                    <div style="display:flex;gap:12px;font-size:12px;">
-                        <span style="color:#37b24d;font-weight:600;">+${stat.added.toLocaleString()}</span>
-                        <span style="color:#f03e3e;font-weight:600;">−${stat.deleted.toLocaleString()}</span>
-                    </div>
-                </div>
-                <div class="bar" style="margin:6px 0;"><span style="width:${barPercent}%;background:${colors[idx]};"></span></div>
-                <div style="display:flex;gap:16px;font-size:11px;color:rgba(255,255,255,0.5);">
-                    <span>${total.toLocaleString()} total changes</span>
-                    <span>${addedPct}% additions</span>
-                </div>
-            </div>
-        `;
-    };
+	const colors = generateColors(effective.length);
+	const totalAdded = effective.reduce((sum, s) => sum + s.added, 0);
+	const totalDeleted = effective.reduce((sum, s) => sum + s.deleted, 0);
+	const totalChanges = totalAdded + totalDeleted;
+	const maxChanges = effective.reduce((acc, s) => Math.max(acc, s.added + s.deleted), 0);
 
-    const previewRows = effectiveStats.slice(0, 5).map((s, i) => renderRow(s, i)).join('');
-    const allRows = effectiveStats.map((s, i) => renderRow(s, i)).join('');
+	const commitsByName = new Map<string, number>();
+	for (const author of analytics.commitsByAuthor) {
+		const name = author.author.replace(/\s*<[^>]*>\s*$/, '').trim();
+		commitsByName.set(name, (commitsByName.get(name) ?? 0) + author.commits);
+	}
 
-    const barLabels = effectiveStats.slice(0, 10).map(s => escapeHtml(s.name));
-    const addedData = effectiveStats.slice(0, 10).map(s => s.added);
-    const deletedData = effectiveStats.slice(0, 10).map(s => s.deleted);
-    const axisColor = 'rgba(255,255,255,0.85)';
-    const gridColor = 'rgba(255,255,255,0.1)';
+	const rows = effective.map((stat, idx) => {
+		const total = stat.added + stat.deleted;
+		const percent = totalChanges > 0 ? Math.round((total / totalChanges) * 100) : 0;
+		const commits = commitsByName.get(stat.name);
+		const meta = [
+			commits !== undefined ? `${formatNumber(commits)} commit${commits === 1 ? '' : 's'}` : undefined,
+			`${formatNumber(total)} changes`,
+			`${percent}% of churn`,
+		].filter(Boolean).join(' · ');
 
-    const branchBadge = result.branch && result.branch !== 'all'
-        ? `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;background:rgba(64,152,255,0.15);border:1px solid rgba(64,152,255,0.3);font-size:11px;font-weight:600;color:#4098ff;">
-               <span style="font-size:13px;">⎇</span> ${escapeHtml(result.branch)}
-           </span>`
-        : `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);font-size:11px;color:rgba(255,255,255,0.5);">
-               <span style="font-size:13px;">⎇</span> all branches
-           </span>`;
+		return `
+			<div class="row">
+				<div class="row-head">
+					<div class="row-name">
+						<span class="dot" style="background:${colors[idx]}"></span>
+						<span>${escapeHtml(stat.name)}</span>
+					</div>
+					<div class="row-value">
+						<span class="added">+${formatNumber(stat.added)}</span>
+						<span class="deleted">−${formatNumber(stat.deleted)}</span>
+					</div>
+				</div>
+				<div class="bar"><span style="width:${barWidth(total, maxChanges)}%;background:${colors[idx]}"></span></div>
+				<div class="row-meta">${escapeHtml(meta)}</div>
+			</div>
+		`;
+	}).join('');
 
-    return `
-        <div class="card">
-            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
-                <h2 style="margin:0;">Contributors</h2>
-                ${branchBadge}
-            </div>
+	const showToggle = effective.length > 5;
+	const top = effective.slice(0, 10);
+	const chartHeight = Math.max(200, top.length * 34 + 60);
 
-            <div class="metric-grid" style="margin-bottom:20px;">
-                <div class="metric-card">
-                    <div class="metric-title">Contributors</div>
-                    <div class="metric-value">${effectiveStats.length.toLocaleString()}</div>
-                    <div class="metric-note">with code changes</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-title">Lines Added</div>
-                    <div class="metric-value" style="color:#37b24d;">+${totalAdded.toLocaleString()}</div>
-                    <div class="metric-note">across all commits</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-title">Lines Removed</div>
-                    <div class="metric-value" style="color:#f03e3e;">−${totalDeleted.toLocaleString()}</div>
-                    <div class="metric-note">across all commits</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-title">Net Change</div>
-                    <div class="metric-value" style="color:${netChange >= 0 ? '#37b24d' : '#f03e3e'};">${netChange >= 0 ? '+' : ''}${netChange.toLocaleString()}</div>
-                    <div class="metric-note">added minus removed</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-title">Top Contributor</div>
-                    <div class="metric-value" style="font-size:15px;word-break:break-word;">${topContributor ? escapeHtml(topContributor.name) : '—'}</div>
-                    <div class="metric-note">${topContributor ? `${(topContributor.added + topContributor.deleted).toLocaleString()} changes` : ''}</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-title">Avg Lines / Contributor</div>
-                    <div class="metric-value">${avgLines.toLocaleString()}</div>
-                    <div class="metric-note">added + removed</div>
-                </div>
-            </div>
+	return `
+		${renderTeamCard(effective, colors, totalChanges)}
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
-                <div>
-                    <div id="contributors-list">
-                        ${previewRows}
-                    </div>
-                    ${showToggle ? `
-                    <div id="contributors-all" style="display:none;">
-                        ${allRows}
-                    </div>
-                    <div style="margin-top:8px;">
-                        <button id="contributors-toggle" class="link" type="button" data-count="${effectiveStats.length}">Show all ${effectiveStats.length} contributors</button>
-                    </div>` : ''}
-                </div>
-                <div>
-                    <div style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.7);margin-bottom:8px;">Lines Changed — Top ${Math.min(effectiveStats.length, 10)}</div>
-                    <div class="chart-container" style="height:${Math.max(200, Math.min(effectiveStats.length, 10) * 36 + 40)}px;">
-                        <canvas id="contributorsAuthorBar"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <script>
-            (function() {
-                const axisColor = ${JSON.stringify(axisColor)};
-                const gridColor = ${JSON.stringify(gridColor)};
-                const barColors = ${JSON.stringify(colors.slice(0, 10))};
-                const ctx = document.getElementById('contributorsAuthorBar');
-                if (ctx) {
-                    try {
-                        new Chart(ctx, {
-                            type: 'bar',
-                            data: {
-                                labels: ${JSON.stringify(barLabels)},
-                                datasets: [
-                                    { label: 'Lines Added', data: ${JSON.stringify(addedData)}, backgroundColor: 'rgba(55,178,77,0.7)', stack: 'changes' },
-                                    { label: 'Lines Removed', data: ${JSON.stringify(deletedData)}, backgroundColor: 'rgba(240,62,62,0.7)', stack: 'changes' }
-                                ]
-                            },
-                            options: {
-                                indexAxis: 'y',
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                interaction: { mode: 'index', intersect: false },
-                                layout: { padding: { left: 10, right: 12, top: 4, bottom: 4 } },
-                                plugins: {
-                                    legend: { labels: { color: axisColor, font: { size: 11 }, boxWidth: 12, padding: 12 } },
-                                    tooltip: { enabled: true }
-                                },
-                                scales: {
-                                    x: { stacked: true, beginAtZero: true, ticks: { color: axisColor, font: { size: 11 } }, grid: { color: gridColor } },
-                                    y: { stacked: true, ticks: { color: axisColor, font: { size: 11 }, autoSkip: false }, grid: { display: false } }
-                                }
-                            }
-                        });
-                    } catch (e) { /* keep toggle usable if chart fails */ }
-                }
+		<div class="metric-grid">
+			<div class="metric-card">
+				<div class="metric-title">Lines added</div>
+				<div class="metric-value added">+${formatNumber(totalAdded)}</div>
+			</div>
+			<div class="metric-card">
+				<div class="metric-title">Lines removed</div>
+				<div class="metric-value deleted">−${formatNumber(totalDeleted)}</div>
+			</div>
+			<div class="metric-card">
+				<div class="metric-title">Net change</div>
+				<div class="metric-value ${totalAdded - totalDeleted >= 0 ? 'added' : 'deleted'}">
+					${totalAdded - totalDeleted >= 0 ? '+' : ''}${formatNumber(totalAdded - totalDeleted)}
+				</div>
+			</div>
+			<div class="metric-card">
+				<div class="metric-title">Avg per contributor</div>
+				<div class="metric-value">${formatNumber(Math.round(totalChanges / effective.length))}</div>
+				<div class="metric-note">added + removed</div>
+			</div>
+		</div>
 
-                const toggleBtn = document.getElementById('contributors-toggle');
-                const preview = document.getElementById('contributors-list');
-                const all = document.getElementById('contributors-all');
-                if (toggleBtn && preview && all) {
-                    toggleBtn.addEventListener('click', function() {
-                        const isHidden = all.style.display === 'none' || getComputedStyle(all).display === 'none';
-                        preview.style.display = isHidden ? 'none' : 'block';
-                        all.style.display = isHidden ? 'block' : 'none';
-                        toggleBtn.textContent = isHidden
-                            ? 'Show fewer contributors'
-                            : 'Show all ' + (toggleBtn.dataset.count || '') + ' contributors';
-                    });
-                }
-            })();
-        </script>
-    `;
+		<div class="split-grid">
+			<div class="card">
+				${renderCardHead('Who changed what', renderBranchChip(result.branch))}
+				<div class="table collapsible${showToggle ? ' is-collapsed' : ''}" id="contributor-rows">${rows}</div>
+				${showToggle
+					? `<div><button id="contributors-toggle" class="link" type="button" aria-expanded="false" aria-controls="contributor-rows">Show all ${effective.length} contributors</button></div>`
+					: ''}
+			</div>
+			<div class="card">
+				${renderCardHead(`Lines changed — top ${top.length}`)}
+				<div class="chart-container" style="height:${chartHeight}px;"><canvas id="contributorsBar"></canvas></div>
+			</div>
+		</div>
+
+		<script nonce="${nonce}">
+		(function() {
+			var canvas = document.getElementById('contributorsBar');
+			if (canvas && typeof Chart !== 'undefined') {
+				var T = window.CCTheme;
+				new Chart(canvas, {
+					type: 'bar',
+					data: {
+						labels: ${JSON.stringify(top.map(s => s.name))},
+						datasets: [
+							{ label: 'Added', data: ${JSON.stringify(top.map(s => s.added))}, backgroundColor: T.rgba(T.added, 0.75), stack: 'changes' },
+							{ label: 'Removed', data: ${JSON.stringify(top.map(s => s.deleted))}, backgroundColor: T.rgba(T.deleted, 0.75), stack: 'changes' }
+						]
+					},
+					options: {
+						indexAxis: 'y',
+						responsive: true,
+						interaction: { mode: 'index', intersect: false },
+						scales: {
+							x: { stacked: true, beginAtZero: true, grid: { color: T.grid } },
+							y: { stacked: true, ticks: { autoSkip: false }, grid: { display: false } }
+						}
+					}
+				});
+			}
+
+			var toggle = document.getElementById('contributors-toggle');
+			var list = document.getElementById('contributor-rows');
+			if (toggle && list) {
+				toggle.addEventListener('click', function() {
+					var collapsed = list.classList.toggle('is-collapsed');
+					toggle.setAttribute('aria-expanded', String(!collapsed));
+					toggle.textContent = collapsed
+						? 'Show all ${effective.length} contributors'
+						: 'Show fewer contributors';
+				});
+			}
+		})();
+		</script>
+	`;
+};
+
+export const renderContributorTimeline = (analytics: RepoAnalyticsResult, nonce: string): string => {
+	if (analytics.commits.length === 0 || analytics.authors.length === 0) {
+		return '';
+	}
+
+	return `
+		<div class="card">
+			${renderCardHead('Activity over time', '<span class="chip chip-muted">commits by month</span>')}
+			<div class="chart-container" style="height:280px;"><canvas id="contributorTimeline"></canvas></div>
+			<script nonce="${nonce}">
+			(function() {
+				var canvas = document.getElementById('contributorTimeline');
+				if (!canvas || typeof Chart === 'undefined' || !window.CCAgg) { return; }
+				var T = window.CCTheme;
+				var authors = ${JSON.stringify(analytics.authors)};
+				var agg = window.CCAgg.byAuthorMonth(${JSON.stringify(analytics.commits)}, authors);
+				// Cap the legend: past ~8 series a stacked area becomes unreadable.
+				var totals = agg.series.map(function(s, i) {
+					return { i: i, total: s.reduce(function(a, b) { return a + b; }, 0) };
+				}).sort(function(a, b) { return b.total - a.total; });
+				var keep = totals.slice(0, 8).map(function(t) { return t.i; });
+				var datasets = keep.map(function(idx, order) {
+					return {
+						label: authors[idx],
+						data: agg.series[idx],
+						backgroundColor: T.rgba(T.series(order), 0.75),
+						borderWidth: 0,
+						stack: 'authors'
+					};
+				});
+				if (totals.length > keep.length) {
+					var others = agg.months.map(function(_, m) {
+						return totals.slice(8).reduce(function(sum, t) { return sum + agg.series[t.i][m]; }, 0);
+					});
+					datasets.push({ label: 'Others', data: others, backgroundColor: T.rgba(T.muted, 0.5), borderWidth: 0, stack: 'authors' });
+				}
+				new Chart(canvas, {
+					type: 'bar',
+					data: { labels: agg.months, datasets: datasets },
+					options: {
+						responsive: true,
+						interaction: { mode: 'index', intersect: false },
+						scales: {
+							x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 0, maxTicksLimit: 14 } },
+							y: { stacked: true, beginAtZero: true, grid: { color: T.grid }, ticks: { precision: 0 } }
+						}
+					}
+				});
+			})();
+			</script>
+		</div>
+	`;
 };

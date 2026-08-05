@@ -1,18 +1,25 @@
 export const baseStyles = `
+
 	:root {
 		color-scheme: light dark;
 		--bg: var(--vscode-editor-background);
-		--fg: var(--vscode-editor-foreground);
+		--fg: var(--vscode-editor-foreground, var(--vscode-foreground));
 		--muted: var(--vscode-descriptionForeground);
-		--border: var(--vscode-panel-border);
-		--accent: var(--vscode-button-background);
-		--accent-hover: var(--vscode-button-hoverBackground);
-		--card: var(--vscode-sideBar-background);
-		--input-bg: var(--vscode-input-background);
+		--border: var(--vscode-panel-border, var(--vscode-widget-border));
+		/* A colour meant to be read as text/graphics, not a button fill. */
+		--accent: var(--vscode-textLink-foreground, var(--vscode-charts-blue));
+		--added: var(--vscode-charts-green);
+		--deleted: var(--vscode-charts-red);
+		--card: var(--vscode-sideBar-background, var(--vscode-editorWidget-background));
 		--surface-2: color-mix(in srgb, var(--card) 85%, var(--bg) 15%);
+		--hover: var(--vscode-list-hoverBackground);
+		--focus: var(--vscode-focusBorder);
+		--btn-bg: var(--vscode-button-background);
+		--btn-fg: var(--vscode-button-foreground);
+		--btn-hover: var(--vscode-button-hoverBackground);
 		--radius-card: 12px;
 		--radius-sm: 6px;
-		--shadow-card: 0 2px 8px rgba(0,0,0,0.18), 0 1px 2px rgba(0,0,0,0.12);
+		--shadow-card: none;
 		--transition: 150ms ease;
 	}
 
@@ -33,11 +40,18 @@ export const baseStyles = `
 		overflow-x: hidden;
 	}
 
-	code {
+	code, .mono {
 		font-family: var(--vscode-editor-font-family, monospace);
 		font-size: 11px;
-		background: rgba(128,128,128,0.15);
+	}
+
+	code {
+		background: color-mix(in srgb, var(--fg) 12%, transparent);
 		padding: 1px 4px;
 		border-radius: 3px;
+	}
+
+	.num {
+		font-variant-numeric: tabular-nums;
 	}
 `;
