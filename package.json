@@ -1,6 +1,6 @@
 {
   "name": "CodeLineCounter",
-  "displayName": "CodeCount",
+  "displayName": "CodeLineCounter",
   "description": "Branch-aware code analytics: line counts, contributor churn, commit rhythm and language breakdowns, right inside VS Code.",
   "version": "4.0.0",
   "icon": "resources/codecount.png",
